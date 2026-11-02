@@ -1,0 +1,167 @@
+{
+  "metadata": {
+    "source": "IIIT Dharwad Mess 1 Menu (Official Mess Committee Schedule)",
+    "mess_name": "IIIT Dharwad - Mess 1",
+    "notes": [
+      "Slashed items ('/') provided in alternating weeks.",
+      "Limitations apply to Banana, Sweets, Punugulu and Fruits (Max Banana 2 pcs, Ice Cream 1 cup).",
+      "Afternoon eggs limited to 2."
+    ]
+  },
+  "menu": {
+    "Monday": {
+      "Breakfast": {
+        "dishes": ["Pongal", "Poha"],
+        "display_text": "Pongal / Poha with Sev, Chutney, Black Chana Sprouts, Boiled Egg (Accompaniments: Fruits, Bread-Butter-Jam, Tea/Coffee/Milk/Bournvita)",
+        "primary_dish": "Pongal"
+      },
+      "Lunch": {
+        "dishes": ["Curd Rice", "Dal Methi", "Brinjal Bhartha", "Chapati", "Plain Rice"],
+        "display_text": "Curd Rice, Dal Methi, Brinjal Bhartha, Chapati / Fulka, Buttermilk, Plain Rice, Pickle, Papad, Salad",
+        "primary_dish": "Curd Rice"
+      },
+      "Snacks": {
+        "dishes": ["Samosa", "Ginger Tea"],
+        "display_text": "Samosa, Red & Green Chutney, Fruits, BBJ, Ginger Tea/Milk/Bournvita",
+        "primary_dish": "Samosa"
+      },
+      "Dinner": {
+        "dishes": ["Kadai Paneer", "Rasam", "Dal Pancha Ratan", "Sheera", "Plain Rice", "Chapati"],
+        "display_text": "Kadai Paneer, Rasam, Dal Pancha Ratan, Sheera (Rava), Plain Rice, Chapati / Fulka, Salad, Pickle",
+        "primary_dish": "Kadai Paneer"
+      }
+    },
+    "Tuesday": {
+      "Breakfast": {
+        "dishes": ["Upma", "Sheera"],
+        "display_text": "Upma / Sewaiya Upma, Sheera, Chutney, Boiled Groundnut, Egg Bhurji (Accompaniments: Fruits, Bread-Butter-Jam, Tea/Coffee/Milk)",
+        "primary_dish": "Upma"
+      },
+      "Lunch": {
+        "dishes": ["Veg Pulav", "Dal Tadka", "White Peas Masala", "Puri", "Curd", "Plain Rice"],
+        "display_text": "Veg Pulav, Dal Tadka, White Peas Masala, Puri / Chapati, Lemonade, Curd, Plain Rice, Pickle, Papad, Salad",
+        "primary_dish": "Veg Pulav"
+      },
+      "Snacks": {
+        "dishes": ["Pani Puri", "Ginger Tea"],
+        "display_text": "Pani Puri, Fruits, BBJ, Ginger Tea/Milk/Bournvita",
+        "primary_dish": "Pani Puri"
+      },
+      "Dinner": {
+        "dishes": ["Khichadi", "Bhendi Sabji", "Veg Kadai", "Channa Dal", "Plain Rice", "Chapati"],
+        "display_text": "Khichadi / Bisi Bele Bath with Boondi, Bhendi Sabji, Veg Kadai, Channa Dal, Ice Cream, Plain Rice, Chapati",
+        "primary_dish": "Khichadi"
+      }
+    },
+    "Wednesday": {
+      "Breakfast": {
+        "dishes": ["Idli", "Vada"],
+        "display_text": "Idli, Vada, Sambar & Chutney, Matki Sprouts, Boiled Egg (Accompaniments: Fruits, Bread-Butter-Jam, Tea/Coffee/Milk)",
+        "primary_dish": "Idli"
+      },
+      "Lunch": {
+        "dishes": ["Onion Rice", "Dal Makhani", "Jeera Aloo", "Chawli Masala", "Chapati", "Curd", "Plain Rice"],
+        "display_text": "Onion Rice, Dal Makhani, Jeera Aloo, Chawli Masala, Chapati / Fulka, Jaljeera, Curd, Plain Rice, Papad",
+        "primary_dish": "Onion Rice"
+      },
+      "Snacks": {
+        "dishes": ["Punugulu", "Ginger Tea"],
+        "display_text": "Punugulu & Chutney, Fruits, BBJ, Ginger Tea/Milk/Bournvita",
+        "primary_dish": "Punugulu"
+      },
+      "Dinner": {
+        "dishes": ["Soyabean Biryani", "Paneer Kolhapuri", "Rasam", "Masoor Dal", "Plain Rice", "Chapati"],
+        "display_text": "Soyabean Biryani, Paneer Kolhapuri, Rasam, Veg Raita, Masoor Dal, Shevai Kheer, Plain Rice, Chapati",
+        "primary_dish": "Paneer Kolhapuri"
+      }
+    },
+    "Thursday": {
+      "Breakfast": {
+        "dishes": ["Aloo Paratha"],
+        "display_text": "Aloo Paratha, Chutney & Curd, Boiled Sweet Corn, Boiled Egg (Accompaniments: Fruits, Bread-Butter-Jam, Tea/Coffee/Milk)",
+        "primary_dish": "Aloo Paratha"
+      },
+      "Lunch": {
+        "dishes": ["Puliogare", "Dal Fry", "Brinjal Tomato", "Kadhi Pakoda", "Chapati", "Plain Rice"],
+        "display_text": "Puliogare (Tamarind Rice), Dal Fry, Brinjal Tomato, Kadhi Pakoda, Chapati / Fulka, Lassi, Plain Rice, Papad",
+        "primary_dish": "Puliogare"
+      },
+      "Snacks": {
+        "dishes": ["Veg Noodles", "Ginger Tea"],
+        "display_text": "Veg Noodles, Red & Green Chutney, Fruits, BBJ, Ginger Tea/Milk",
+        "primary_dish": "Veg Noodles"
+      },
+      "Dinner": {
+        "dishes": ["Ivy Gourd Fry", "Cabbage Baji", "Dal", "Plain Rice", "Chapati"],
+        "display_text": "Onion Rice, Ivy Gourd Fry, Cabbage Baji, Dal, Motichoor Ladoo, Plain Rice, Chapati, Salad",
+        "primary_dish": "Ivy Gourd Fry"
+      }
+    },
+    "Friday": {
+      "Breakfast": {
+        "dishes": ["Masala Dosa"],
+        "display_text": "Masala Dosa, Sambar & Chutney, Green Moong Sprouts (Accompaniments: Fruits, Bread-Butter-Jam, Tea/Coffee/Milk)",
+        "primary_dish": "Masala Dosa"
+      },
+      "Lunch": {
+        "dishes": ["Veg & Egg Biryani", "Mix Veg Raita", "Black Chana Masala", "Chapati", "Curd", "Plain Rice"],
+        "display_text": "Veg & Egg Biryani, Mix Veg Raita, Black Chana Masala, Chapati / Fulka, Lemon Juice, Curd, Plain Rice",
+        "primary_dish": "Veg & Egg Biryani"
+      },
+      "Snacks": {
+        "dishes": ["Pasta", "Ginger Tea"],
+        "display_text": "Pasta, Red & Green Chutney, Fruits, BBJ, Ginger Tea/Milk",
+        "primary_dish": "Pasta"
+      },
+      "Dinner": {
+        "dishes": ["Tomato Rice", "Aloo 65", "Soyabean Sabzi Gravy", "Dal Tadka", "Plain Rice", "Chapati"],
+        "display_text": "Tomato Rice, Aloo 65, Soyabean Sabzi Gravy, Dal Tadka, Gulab Jamun, Plain Rice, Chapati, Salad",
+        "primary_dish": "Tomato Rice"
+      }
+    },
+    "Saturday": {
+      "Breakfast": {
+        "dishes": ["Uthappam"],
+        "display_text": "Uthappam, Chutney / Coconut Chutney, Matki Sprouts, Egg Bhurji (Accompaniments: Fruits, BBJ, Tea/Coffee/Milk)",
+        "primary_dish": "Uthappam"
+      },
+      "Lunch": {
+        "dishes": ["Curd Rice", "Dal Palak", "Chole Bhature", "Plain Rice"],
+        "display_text": "Curd Rice, Dal Palak, Chole Bhature, Hot Badam Milk, Plain Rice, Pickle, Papad, Salad",
+        "primary_dish": "Chole Bhature"
+      },
+      "Snacks": {
+        "dishes": ["Masala Bhel", "Ginger Tea"],
+        "display_text": "Masala Bhel, Fruits, BBJ, Ginger Tea/Milk",
+        "primary_dish": "Masala Bhel"
+      },
+      "Dinner": {
+        "dishes": ["Jeera Rice", "Shahi Paneer", "Dal Kolhapuri", "Curd", "Plain Rice", "Chapati"],
+        "display_text": "Jeera Rice, Shahi Paneer, Curd, Dal Kolhapuri, Ice Cream, Plain Rice, Chapati, Salad",
+        "primary_dish": "Shahi Paneer"
+      }
+    },
+    "Sunday": {
+      "Breakfast": {
+        "dishes": ["Vangi Bath", "Aloo Mutter Sabzi"],
+        "display_text": "Vangi Bath, Aloo Mutter Sabzi, Green Moong Sprouts (Accompaniments: Fruits, Bread-Butter-Jam, Tea/Coffee/Milk)",
+        "primary_dish": "Vangi Bath"
+      },
+      "Lunch": {
+        "dishes": ["Paneer Butter Masala", "Moong Dal", "Egg Curry", "Chapati", "Plain Rice"],
+        "display_text": "Paneer Butter Masala / Egg Curry, Moong Dal, Chapati / Fulka, Rasna, Plain Rice, Salad, Pickle",
+        "primary_dish": "Paneer Butter Masala"
+      },
+      "Snacks": {
+        "dishes": ["Girmit", "Ginger Tea"],
+        "display_text": "Girmit (North Karnataka Bhel), Fruits, BBJ, Ginger Tea/Milk",
+        "primary_dish": "Girmit"
+      },
+      "Dinner": {
+        "dishes": ["Sorakay Chana", "Veg Kolhapuri", "Moong Dal", "Plain Rice", "Chapati"],
+        "display_text": "Sorakay Chana, Veg Kolhapuri, Moong Dal, Jalebi, Plain Rice, Chapati / Fulka, Salad, Pickle",
+        "primary_dish": "Veg Kolhapuri"
+      }
+    }
+  }
+}
