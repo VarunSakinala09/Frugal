@@ -119,7 +119,7 @@ def render_student_portal():
             """, unsafe_allow_html=True)
 
             q_intent = db.get_student_meal_intents(student_id=username, service_date=today_str, meal_period=next_meal)
-            current_choice = q_intent[0]['intent'] if q_intent else "Not Polled"
+            current_choice = q_intent.iloc[0]['intent_status'] if (q_intent is not None and not q_intent.empty) else "Not Polled"
 
             if current_choice != "Not Polled":
                 st.info(f"Your registered response for {next_meal}: **{current_choice}**")
@@ -222,7 +222,7 @@ def render_student_portal():
                 
                 # Check existing intent
                 existing_intents = db.get_student_meal_intents(student_id=username, service_date=rsvp_date_str, meal_period=rsvp_meal)
-                current_val = existing_intents[0]['intent'] if existing_intents else None
+                current_val = existing_intents.iloc[0]['intent_status'] if (existing_intents is not None and not existing_intents.empty) else None
 
                 if current_val:
                     st.info(f"Your currently recorded status for this meal: **{current_val}** (You may update it below).")
@@ -239,7 +239,7 @@ def render_student_portal():
                 rsvp_submit = st.form_submit_button("💾 Save My Attendance RSVP", use_container_width=True)
 
                 if rsvp_submit:
-                    success = db.submit_student_meal_intent(
+                    res_intent = db.submit_student_meal_intent(
                         student_id=username,
                         service_date=rsvp_date_str,
                         meal_period=rsvp_meal,
@@ -247,6 +247,7 @@ def render_student_portal():
                         hostel=hostel,
                         notes=rsvp_notes
                     )
+                    success = res_intent[0] if isinstance(res_intent, tuple) else res_intent
                     if success:
                         st.success(f"✅ Success! Your RSVP for **{rsvp_meal}** on **{rsvp_date_str}** has been recorded as: **{intent_choice}**.")
                         db.log_audit_event("STUDENT_RSVP", username, f"RSVP: {rsvp_meal} {rsvp_date_str} -> {intent_choice}")
@@ -258,17 +259,20 @@ def render_student_portal():
             st.markdown(f"<div style='font-weight:800; color:#12372A; font-size:1.0rem; margin-bottom:0.8rem;'>Your Registered RSVPs for {rsvp_date_str}</div>", unsafe_allow_html=True)
             day_intents = db.get_student_meal_intents(student_id=username, service_date=rsvp_date_str)
             
-            if day_intents:
-                for di in day_intents:
-                    badge_bg = "rgba(22,163,106,0.12)" if di['intent'] == "Attending" else ("rgba(231,111,81,0.15)" if di['intent'] == "Not Attending" else "rgba(244,162,97,0.15)")
-                    badge_color = "#16A36A" if di['intent'] == "Attending" else ("#E76F51" if di['intent'] == "Not Attending" else "#E76F51")
+            if day_intents is not None and not day_intents.empty:
+                for _, di in day_intents.iterrows():
+                    i_status = di.get('intent_status', di.get('intent', 'Attending'))
+                    m_per = di.get('meal_type', di.get('meal_period', 'Meal'))
+                    t_stamp = di.get('updated_at', di.get('timestamp', ''))
+                    badge_bg = "rgba(22,163,106,0.12)" if i_status == "Attending" else ("rgba(231,111,81,0.15)" if i_status == "Not Attending" else "rgba(244,162,97,0.15)")
+                    badge_color = "#16A36A" if i_status == "Attending" else ("#E76F51" if i_status == "Not Attending" else "#E76F51")
                     st.markdown(f"""
                     <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:12px; padding:0.9rem 1.1rem; margin-bottom:0.7rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <strong style="color:#12372A; font-size:0.95rem;">{di['meal_period']}</strong>
-                            <span style="background:{badge_bg}; color:{badge_color}; font-weight:800; font-size:0.75rem; padding:3px 10px; border-radius:6px;">{di['intent']}</span>
+                            <strong style="color:#12372A; font-size:0.95rem;">{m_per}</strong>
+                            <span style="background:{badge_bg}; color:{badge_color}; font-weight:800; font-size:0.75rem; padding:3px 10px; border-radius:6px;">{i_status}</span>
                         </div>
-                        <div style="font-size:0.78rem; color:#8A9990; margin-top:4px;">Logged: {di['timestamp']}</div>
+                        <div style="font-size:0.78rem; color:#8A9990; margin-top:4px;">Logged: {t_stamp}</div>
                     </div>
                     """, unsafe_allow_html=True)
             else:
@@ -310,7 +314,7 @@ def render_student_portal():
             fb_submit = st.form_submit_button("📤 Submit Anonymous Feedback", use_container_width=True)
 
             if fb_submit:
-                fb_success = db.submit_student_feedback(
+                fb_res = db.submit_student_feedback(
                     student_id=username,
                     service_date=fb_date.strftime("%Y-%m-%d"),
                     meal_period=fb_meal,
@@ -321,6 +325,7 @@ def render_student_portal():
                     skip_reason=fb_skip_reason,
                     comments=fb_comments
                 )
+                fb_success = fb_res[0] if isinstance(fb_res, tuple) else fb_res
                 if fb_success:
                     st.success("🎉 Thank you! Your feedback has been safely recorded in the kitchen improvement database.")
                     db.log_audit_event("STUDENT_FEEDBACK", username, f"Feedback submitted for {fb_meal} on {fb_date}")
@@ -399,15 +404,14 @@ def render_student_portal():
         with p_col2:
             st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.5rem;'>My Recent RSVP History</div>", unsafe_allow_html=True)
             my_intents = db.get_student_meal_intents(student_id=username)
-            if my_intents:
-                intent_data = []
-                for mi in my_intents[:15]:
-                    intent_data.append({
-                        "Date": mi['service_date'],
-                        "Meal": mi['meal_period'],
-                        "Intent": mi['intent'],
-                        "Recorded At": mi['timestamp']
-                    })
-                st.dataframe(pd.DataFrame(intent_data), use_container_width=True, hide_index=True)
+            if my_intents is not None and not my_intents.empty:
+                display_df = my_intents.head(15)[['meal_date', 'meal_type', 'intent_status', 'updated_at']].rename(columns={
+                    'meal_date': 'Date',
+                    'meal_type': 'Meal',
+                    'intent_status': 'Intent',
+                    'updated_at': 'Recorded At'
+                })
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
             else:
                 st.info("No past RSVP history found yet. As you record meal intentions, they will appear here.")
+

@@ -118,10 +118,21 @@ def init_db(db_path: str = DEFAULT_DB_PATH):
                 full_name TEXT NOT NULL,
                 roll_no TEXT,
                 hostel TEXT DEFAULT 'Hostel-1 (Mess 1)',
+                room_number TEXT DEFAULT 'B-204',
+                dietary_preference TEXT DEFAULT 'Vegetarian',
                 is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL
             );
         """)
+        # Ensure room_number and dietary_preference exist in existing database schemas
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN room_number TEXT DEFAULT 'B-204'")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN dietary_preference TEXT DEFAULT 'Vegetarian'")
+        except Exception:
+            pass
 
         # 5. Dynamic and published menu items table (Manager CRUD & publish control)
         cursor.execute("""
@@ -443,20 +454,40 @@ def get_all_registrations(meal_date: Optional[str] = None, db_path: str = DEFAUL
 
 
 def record_meal_waste(
-    meal_date: str,
-    meal_type: str,
-    dish_name: str,
-    quantity_prepared: int,
-    quantity_served: int,
-    discarded_quantity: int,
-    cost_per_serving: float,
+    meal_date: Optional[str] = None,
+    meal_type: Optional[str] = None,
+    dish_name: Optional[str] = None,
+    quantity_prepared: Optional[int] = None,
+    quantity_served: Optional[int] = None,
+    discarded_quantity: Optional[int] = None,
+    cost_per_serving: Optional[float] = None,
     is_synthetic: bool = False,
-    db_path: str = DEFAULT_DB_PATH
+    db_path: str = DEFAULT_DB_PATH,
+    **kwargs: Any
 ) -> Tuple[bool, str]:
     """
     Record or update mess staff food preparation and waste logs.
-    Strictly validates business rules.
+    Strictly validates business rules and supports alias kwargs.
     """
+    if "date_str" in kwargs and not meal_date:
+        meal_date = kwargs["date_str"]
+    if "meal_period" in kwargs and not meal_type:
+        meal_type = kwargs["meal_period"]
+    if "prepared" in kwargs and quantity_prepared is None:
+        quantity_prepared = int(kwargs["prepared"])
+    if "served" in kwargs and quantity_served is None:
+        quantity_served = int(kwargs["served"])
+    if "discarded" in kwargs and discarded_quantity is None:
+        discarded_quantity = int(kwargs["discarded"])
+
+    meal_date = str(meal_date or datetime.now().strftime("%Y-%m-%d"))
+    meal_type = str(meal_type or "Lunch")
+    dish_name = str(dish_name or "General Dish")
+    quantity_prepared = int(quantity_prepared if quantity_prepared is not None else 0)
+    quantity_served = int(quantity_served if quantity_served is not None else 0)
+    discarded_quantity = int(discarded_quantity if discarded_quantity is not None else 0)
+    cost_per_serving = float(cost_per_serving if cost_per_serving is not None else 15.0)
+
     init_db(db_path)
 
     if quantity_prepared < 0 or quantity_served < 0 or discarded_quantity < 0:
@@ -611,9 +642,15 @@ def get_filtered_meal_records(
     custom_start_date: Optional[str] = None,
     custom_end_date: Optional[str] = None,
     limit: Optional[int] = 50,
-    db_path: str = DEFAULT_DB_PATH
+    db_path: str = DEFAULT_DB_PATH,
+    **kwargs: Any
 ) -> Tuple[pd.DataFrame, int]:
     """Retrieve meal records matching specific search filters, returning (df, total_matching_count)."""
+    if "dish_name" in kwargs and not search_dish:
+        search_dish = kwargs["dish_name"]
+    if "meal_period" in kwargs and not meal_type:
+        meal_type = kwargs["meal_period"]
+
     init_db(db_path)
     conn = get_connection(db_path)
     try:
@@ -727,9 +764,11 @@ def get_meal_records(
     end_date: Optional[str] = None,
     meal_type: Optional[str] = None,
     dish_name: Optional[str] = None,
-    db_path: str = DEFAULT_DB_PATH
+    limit: Optional[int] = None,
+    db_path: str = DEFAULT_DB_PATH,
+    **kwargs: Any
 ) -> pd.DataFrame:
-    """Retrieve operational meal records with optional filters."""
+    """Retrieve operational meal records with optional filters and limit."""
     init_db(db_path)
     conditions = []
     params = []
@@ -740,22 +779,25 @@ def get_meal_records(
     if end_date:
         conditions.append("meal_date <= ?")
         params.append(end_date)
-    if meal_type and meal_type != "All":
+    if meal_type and meal_type not in ["All", "All Meals", ""]:
         conditions.append("meal_type = ?")
         params.append(meal_type)
-    if dish_name and dish_name != "All":
+    if dish_name and dish_name not in ["All", "All Dishes", ""]:
         conditions.append("dish_name = ?")
         params.append(dish_name)
 
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    limit_clause = f"LIMIT {int(limit)}" if limit else ""
     query = f"""
-        SELECT id, meal_date, meal_type, dish_name, quantity_prepared,
+        SELECT id, meal_date, meal_date AS date, meal_type, dish_name, quantity_prepared,
                quantity_served, leftover_quantity, discarded_quantity,
                usable_leftover, cost_per_serving, estimated_discarded_food_cost,
+               estimated_discarded_food_cost AS discarded_food_cost_inr,
                is_synthetic, recorded_timestamp
         FROM meal_records
         {where_clause}
         ORDER BY meal_date DESC, meal_type ASC, dish_name ASC
+        {limit_clause}
     """
     conn = get_connection(db_path)
     try:
@@ -1022,16 +1064,37 @@ def get_user_by_id(user_id: int, db_path: str = DEFAULT_DB_PATH) -> Optional[Dic
         conn.close()
 
 
-def get_all_users(role: Optional[str] = None, db_path: str = DEFAULT_DB_PATH) -> pd.DataFrame:
-    """Retrieve DataFrame of users, optionally filtered by role (e.g. 'student' or 'manager')."""
+def get_all_users(
+    role: Optional[str] = None,
+    search: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    db_path: str = DEFAULT_DB_PATH,
+    **kwargs: Any
+) -> pd.DataFrame:
+    """Retrieve DataFrame of users, optionally filtered by role, search, and active status."""
     conn = get_connection(db_path)
     try:
+        where = ["1=1"]
+        params = []
         if role:
-            query = "SELECT id, username, email, role, full_name, roll_no, hostel, is_active, created_at FROM users WHERE role = ? ORDER BY id ASC"
-            return pd.read_sql_query(query, conn, params=(role,))
-        else:
-            query = "SELECT id, username, email, role, full_name, roll_no, hostel, is_active, created_at FROM users ORDER BY id ASC"
-            return pd.read_sql_query(query, conn)
+            where.append("role = ?")
+            params.append(role)
+        if is_active is not None:
+            where.append("is_active = ?")
+            params.append(1 if is_active else 0)
+        if search and search.strip():
+            s = f"%{search.strip()}%"
+            where.append("(username LIKE ? OR full_name LIKE ? OR roll_no LIKE ? OR hostel LIKE ?)")
+            params.extend([s, s, s, s])
+
+        query = f"""
+            SELECT id, username, email, role, full_name, roll_no, hostel,
+                   room_number, dietary_preference, is_active, created_at
+            FROM users
+            WHERE {' AND '.join(where)}
+            ORDER BY id ASC
+        """
+        return pd.read_sql_query(query, conn, params=tuple(params))
     finally:
         conn.close()
 
@@ -1050,20 +1113,45 @@ def update_user_status(user_id: int, is_active: bool, db_path: str = DEFAULT_DB_
 
 def update_user_profile(
     user_id: int,
-    full_name: str,
-    email: str,
-    hostel: str,
-    db_path: str = DEFAULT_DB_PATH
+    full_name: Optional[str] = None,
+    email: Optional[str] = None,
+    hostel: Optional[str] = None,
+    dietary_preference: Optional[str] = None,
+    room_number: Optional[str] = None,
+    db_path: str = DEFAULT_DB_PATH,
+    **kwargs: Any
 ) -> bool:
-    """Allow students/managers to update permissible profile attributes."""
+    """Allow students/managers to update permissible profile attributes, supporting partial updates."""
+    if "dietary_preference" in kwargs and dietary_preference is None:
+        dietary_preference = kwargs["dietary_preference"]
+
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE users 
-            SET full_name = ?, email = ?, hostel = ?
-            WHERE id = ?
-        """, (full_name.strip(), email.strip().lower(), hostel.strip(), user_id))
+        updates = []
+        params = []
+        if full_name is not None:
+            updates.append("full_name = ?")
+            params.append(full_name.strip())
+        if email is not None:
+            updates.append("email = ?")
+            params.append(email.strip().lower())
+        if hostel is not None:
+            updates.append("hostel = ?")
+            params.append(hostel.strip())
+        if dietary_preference is not None:
+            updates.append("dietary_preference = ?")
+            params.append(dietary_preference.strip())
+        if room_number is not None:
+            updates.append("room_number = ?")
+            params.append(room_number.strip())
+
+        if not updates:
+            return True
+
+        params.append(user_id)
+        query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
+        cursor.execute(query, tuple(params))
         conn.commit()
         return cursor.rowcount > 0
     finally:
@@ -1170,8 +1258,10 @@ def seed_default_announcements(db_path: str = DEFAULT_DB_PATH):
         conn.close()
 
 
-def get_announcements(target_role: str = "all", active_only: bool = True, db_path: str = DEFAULT_DB_PATH) -> pd.DataFrame:
+def get_announcements(target_role: str = "all", active_only: bool = True, db_path: str = DEFAULT_DB_PATH, **kwargs: Any) -> pd.DataFrame:
     """Retrieve announcements visible to target role (e.g. 'student', 'manager', or 'all')."""
+    if "only_active" in kwargs:
+        active_only = kwargs["only_active"]
     conn = get_connection(db_path)
     try:
         where = ["1=1"]
@@ -1193,7 +1283,8 @@ def add_announcement(
     content: str,
     priority: str = "Normal",
     target_role: str = "all",
-    db_path: str = DEFAULT_DB_PATH
+    db_path: str = DEFAULT_DB_PATH,
+    **kwargs: Any
 ) -> bool:
     """Manager publishes an announcement."""
     conn = get_connection(db_path)
@@ -1276,17 +1367,23 @@ def get_menu_items(
     meal_type: Optional[str] = None,
     specific_date: Optional[str] = None,
     published_only: bool = False,
-    db_path: str = DEFAULT_DB_PATH
+    db_path: str = DEFAULT_DB_PATH,
+    **kwargs: Any
 ) -> pd.DataFrame:
-    """Retrieve menu items matching filter criteria."""
+    """Retrieve menu items matching filter criteria with alias support."""
+    if "meal_period" in kwargs and not meal_type:
+        meal_type = kwargs["meal_period"]
+    if "only_published" in kwargs:
+        published_only = kwargs["only_published"]
+
     conn = get_connection(db_path)
     try:
         where = ["1=1"]
         params = []
-        if day_of_week:
+        if day_of_week and day_of_week not in ["All", "All Days"]:
             where.append("day_of_week = ?")
             params.append(day_of_week)
-        if meal_type:
+        if meal_type and meal_type not in ["All", "All Meals"]:
             where.append("meal_type = ?")
             params.append(meal_type)
         if specific_date:
@@ -1296,7 +1393,7 @@ def get_menu_items(
             where.append("is_published = 1")
 
         query = f"""
-            SELECT id, day_of_week, meal_type, dish_name, category, cost_per_serving, is_published, specific_date, updated_at
+            SELECT id, day_of_week, meal_type, meal_type AS meal_period, dish_name, category, cost_per_serving, is_published, specific_date, updated_at
             FROM menu_items
             WHERE {' AND '.join(where)}
             ORDER BY id ASC
@@ -1308,16 +1405,20 @@ def get_menu_items(
 
 def add_menu_item(
     day_of_week: str,
-    meal_type: str,
-    dish_name: str,
+    meal_type: str = "Lunch",
+    dish_name: str = "",
     category: str = "Main Course",
     cost_per_serving: float = 15.0,
     is_published: int = 1,
     specific_date: Optional[str] = None,
     created_by: str = "manager",
-    db_path: str = DEFAULT_DB_PATH
+    db_path: str = DEFAULT_DB_PATH,
+    **kwargs: Any
 ) -> Tuple[bool, str]:
     """Manager adds a dish to the official mess schedule."""
+    if "meal_period" in kwargs:
+        meal_type = kwargs["meal_period"]
+
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
@@ -1336,22 +1437,38 @@ def add_menu_item(
 
 def update_menu_item(
     item_id: int,
-    dish_name: str,
-    category: str,
-    cost_per_serving: float,
-    is_published: int,
-    db_path: str = DEFAULT_DB_PATH
+    dish_name: Optional[str] = None,
+    category: Optional[str] = None,
+    cost_per_serving: Optional[float] = None,
+    is_published: Optional[int] = None,
+    db_path: str = DEFAULT_DB_PATH,
+    **kwargs: Any
 ) -> bool:
-    """Manager updates an existing menu item."""
+    """Manager updates an existing menu item, supporting partial updates (e.g. only is_published)."""
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("""
-            UPDATE menu_items 
-            SET dish_name = ?, category = ?, cost_per_serving = ?, is_published = ?, updated_at = ?
-            WHERE id = ?
-        """, (dish_name.strip(), category.strip(), float(cost_per_serving), int(is_published), now_str, item_id))
+        
+        updates = ["updated_at = ?"]
+        params = [now_str]
+
+        if dish_name is not None:
+            updates.append("dish_name = ?")
+            params.append(dish_name.strip())
+        if category is not None:
+            updates.append("category = ?")
+            params.append(category.strip())
+        if cost_per_serving is not None:
+            updates.append("cost_per_serving = ?")
+            params.append(float(cost_per_serving))
+        if is_published is not None:
+            updates.append("is_published = ?")
+            params.append(int(is_published))
+
+        params.append(item_id)
+        query = f"UPDATE menu_items SET {', '.join(updates)} WHERE id = ?"
+        cursor.execute(query, tuple(params))
         conn.commit()
         return cursor.rowcount > 0
     finally:
@@ -1388,15 +1505,27 @@ def publish_all_day_menu(day_of_week: str, is_published: int = 1, db_path: str =
 # =============================================================================
 
 def submit_student_meal_intent(
-    user_id: int,
-    student_roll: str,
-    meal_date: str,
-    meal_type: str,
-    intent_status: str,
-    dietary_pref: str = "Standard Veg",
-    db_path: str = DEFAULT_DB_PATH
+    *args,
+    **kwargs
 ) -> Tuple[bool, str]:
-    """Record student dining intent for a specific meal shift. Overwrites prior intent for same meal."""
+    """Record student dining intent for a specific meal shift. Supports positional or keyword arguments."""
+    db_path = kwargs.get("db_path", DEFAULT_DB_PATH)
+    
+    if len(args) >= 5:
+        user_id = args[0]
+        student_roll = str(args[1])
+        meal_date = str(args[2])
+        meal_type = str(args[3])
+        intent_status = str(args[4])
+        dietary_pref = args[5] if len(args) > 5 else kwargs.get("dietary_pref", "Standard Veg")
+    else:
+        user_id = kwargs.get("user_id", 1)
+        student_roll = str(kwargs.get("student_roll", kwargs.get("student_id", kwargs.get("username", "STUDENT"))))
+        meal_date = str(kwargs.get("meal_date", kwargs.get("service_date", datetime.now().strftime("%Y-%m-%d"))))
+        meal_type = str(kwargs.get("meal_type", kwargs.get("meal_period", "Lunch")))
+        intent_status = str(kwargs.get("intent_status", kwargs.get("intent", "Attending")))
+        dietary_pref = str(kwargs.get("dietary_pref", kwargs.get("dietary_preference", "Standard Veg")))
+
     if intent_status not in ["Attending", "Not Attending", "Not sure"]:
         return False, "Invalid attendance status."
 
@@ -1429,23 +1558,37 @@ def submit_student_meal_intent(
 
 
 def get_student_meal_intents(
-    student_roll: Optional[str] = None,
-    meal_date: Optional[str] = None,
-    db_path: str = DEFAULT_DB_PATH
+    *args,
+    **kwargs
 ) -> pd.DataFrame:
-    """Retrieve student meal attendance intent records."""
+    """Retrieve student meal attendance intent records. Supports student_roll or student_id, meal_date or service_date."""
+    db_path = kwargs.get("db_path", DEFAULT_DB_PATH)
+    student_roll = kwargs.get("student_roll", kwargs.get("student_id", kwargs.get("username", args[0] if len(args) > 0 else None)))
+    meal_date = kwargs.get("meal_date", kwargs.get("service_date", args[1] if len(args) > 1 else None))
+    meal_type = kwargs.get("meal_type", kwargs.get("meal_period", args[2] if len(args) > 2 else None))
+
     conn = get_connection(db_path)
     try:
         where = ["1=1"]
         params = []
         if student_roll:
             where.append("student_roll = ?")
-            params.append(student_roll.strip().upper())
+            params.append(str(student_roll).strip().upper())
         if meal_date:
             where.append("meal_date = ?")
-            params.append(meal_date)
+            params.append(str(meal_date))
+        if meal_type:
+            where.append("meal_type = ?")
+            params.append(str(meal_type))
 
-        query = f"SELECT id, student_roll, meal_date, meal_type, intent_status, dietary_preference, updated_at FROM student_meal_intents WHERE {' AND '.join(where)} ORDER BY meal_date DESC, id DESC"
+        query = f"""
+            SELECT id, student_roll, meal_date, meal_date AS service_date,
+                   meal_type, meal_type AS meal_period, intent_status, intent_status AS intent,
+                   dietary_preference, updated_at, updated_at AS timestamp
+            FROM student_meal_intents
+            WHERE {' AND '.join(where)}
+            ORDER BY meal_date DESC, id DESC
+        """
         return pd.read_sql_query(query, conn, params=tuple(params))
     finally:
         conn.close()
@@ -1495,17 +1638,30 @@ def get_aggregated_intent_counts_for_date(
 
 
 def submit_student_feedback(
-    user_id: int,
-    student_roll: str,
-    meal_date: str,
-    meal_type: str,
-    dish_name: Optional[str] = None,
-    rating: int = 5,
-    feedback_text: str = "",
-    skip_reason: str = "",
-    db_path: str = DEFAULT_DB_PATH
+    *args,
+    **kwargs
 ) -> Tuple[bool, str]:
-    """Store student meal review or reason for skipping dining shift."""
+    """Store student meal review or reason for skipping dining shift. Supports positional or keyword arguments."""
+    db_path = kwargs.get("db_path", DEFAULT_DB_PATH)
+    if len(args) >= 4:
+        user_id = args[0]
+        student_roll = str(args[1])
+        meal_date = str(args[2])
+        meal_type = str(args[3])
+        dish_name = args[4] if len(args) > 4 else kwargs.get("dish_name", "Overall Meal")
+        rating = args[5] if len(args) > 5 else kwargs.get("rating", 5)
+        feedback_text = args[6] if len(args) > 6 else kwargs.get("feedback_text", kwargs.get("comments", ""))
+        skip_reason = args[7] if len(args) > 7 else kwargs.get("skip_reason", "")
+    else:
+        user_id = kwargs.get("user_id", 1)
+        student_roll = str(kwargs.get("student_roll", kwargs.get("student_id", "STUDENT")))
+        meal_date = str(kwargs.get("meal_date", kwargs.get("service_date", datetime.now().strftime("%Y-%m-%d"))))
+        meal_type = str(kwargs.get("meal_type", kwargs.get("meal_period", "Lunch")))
+        dish_name = kwargs.get("dish_name", "Overall Meal")
+        rating = int(kwargs.get("rating", 5))
+        feedback_text = str(kwargs.get("feedback_text", kwargs.get("comments", "")))
+        skip_reason = str(kwargs.get("skip_reason", ""))
+
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
@@ -1806,14 +1962,28 @@ def record_actual_discarded_weight(
 # =============================================================================
 
 def log_audit_event(
-    username: str,
-    role: str,
-    action: str,
-    entity: str,
-    details: str,
-    db_path: str = DEFAULT_DB_PATH
+    *args,
+    **kwargs
 ) -> bool:
-    """Record security and administrative events into audit_logs table."""
+    """Record security and administrative events into audit_logs table. Supports flexible argument orders."""
+    db_path = kwargs.get("db_path", DEFAULT_DB_PATH)
+    if len(args) == 5:
+        username, role, action, entity, details = args
+    elif len(args) == 3:
+        # e.g. log_audit_event("USER_LOGIN", username, details)
+        action, username, details = args
+        role = "manager" if username == "manager" else ("student" if username != "system" else "system")
+        entity = "APPLICATION"
+    elif len(args) == 4:
+        action, username, entity, details = args
+        role = "manager" if username == "manager" else "student"
+    else:
+        username = kwargs.get("username", "system")
+        role = kwargs.get("role", "system")
+        action = kwargs.get("action", "EVENT")
+        entity = kwargs.get("entity", "APPLICATION")
+        details = kwargs.get("details", "")
+
     conn = get_connection(db_path)
     try:
         cursor = conn.cursor()
@@ -1821,7 +1991,7 @@ def log_audit_event(
         cursor.execute("""
             INSERT INTO audit_logs (username, role, action, entity, details, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (username, role, action, entity, details, now_str))
+        """, (str(username), str(role), str(action), str(entity), str(details), now_str))
         conn.commit()
         return True
     except Exception as e:

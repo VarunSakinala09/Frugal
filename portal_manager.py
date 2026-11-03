@@ -916,29 +916,32 @@ def render_manager_portal():
             save_record_btn = st.form_submit_button("💾 Save Record to Database", use_container_width=True)
 
             if save_record_btn:
-                rec_id = db.record_meal_waste(
-                    date_str=r_date,
+                success, msg = db.record_meal_waste(
+                    meal_date=r_date,
                     meal_type=r_meal,
                     dish_name=r_dish,
-                    prepared=r_prep,
-                    served=r_served,
-                    discarded=r_discarded,
+                    quantity_prepared=r_prep,
+                    quantity_served=r_served,
+                    discarded_quantity=r_discarded,
                     cost_per_serving=r_cost
                 )
-                est_loss = float(r_discarded * r_cost)
-                st.session_state["last_saved_waste_record"] = {
-                    "id": rec_id,
-                    "date": r_date,
-                    "meal": r_meal,
-                    "dish": r_dish,
-                    "prep": r_prep,
-                    "served": r_served,
-                    "leftover": r_leftover,
-                    "discarded": r_discarded,
-                    "loss": est_loss
-                }
-                db.log_audit_event("WASTE_RECORD_SAVED", "manager", f"Saved waste record ID {rec_id} for {r_dish} ({r_discarded} servings discarded)")
-                st.rerun()
+                if success:
+                    est_loss = float(r_discarded * r_cost)
+                    st.session_state["last_saved_waste_record"] = {
+                        "id": f"REC-{r_date.replace('-', '')}-{r_meal[:3].upper()}",
+                        "date": r_date,
+                        "meal": r_meal,
+                        "dish": r_dish,
+                        "prep": r_prep,
+                        "served": r_served,
+                        "leftover": r_leftover,
+                        "discarded": r_discarded,
+                        "loss": est_loss
+                    }
+                    db.log_audit_event("WASTE_RECORD_SAVED", "manager", f"Saved waste record for {r_dish} ({r_discarded} servings discarded)")
+                    st.rerun()
+                else:
+                    st.error(f"Failed to save record: {msg}")
 
         # Confirmation Card upon successful save
         if "last_saved_waste_record" in st.session_state:
@@ -976,9 +979,14 @@ def render_manager_portal():
         meal_param = None if h_meal_filter == "All Meals" else h_meal_filter
         dish_param = h_dish_filter.strip() if h_dish_filter.strip() else None
 
-        filtered_records = db.get_filtered_meal_records(dish_name=dish_param, meal_type=meal_param, limit=h_limit)
+        res = db.get_filtered_meal_records(dish_name=dish_param, meal_type=meal_param, limit=h_limit)
+        if isinstance(res, tuple):
+            filtered_records, total_count = res
+        else:
+            filtered_records = res
+            total_count = len(filtered_records)
         
-        st.caption(f"Showing {len(filtered_records)} most recent records (Newest at the top)")
+        st.caption(f"Showing {len(filtered_records)} of {total_count} matching records (Newest at the top)")
         if filtered_records.empty:
             st.info("No saved records found matching the filter.")
         else:
@@ -1071,3 +1079,4 @@ def render_manager_portal():
             st.dataframe(audit_df, use_container_width=True, hide_index=True)
         else:
             st.info("No audit events recorded yet.")
+
