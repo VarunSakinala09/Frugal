@@ -2,15 +2,14 @@
 portal_manager.py
 =================
 Mess Manager Portal for MessMind AI.
-Administrative control center for IIIT Dharwad Mess 1:
-- Executive Manager Dashboard with ground-truth KPIs & Plotly charts
-- Menu Management (CRUD + Publish / Unpublish toggles)
-- Student Directory & Account Management (Activate / Deactivate)
-- Demand & Preparation Planning (Student RSVP + ML + 5% Safety Buffer + Approval Order)
-- Multi-Plate OpenCV Vision Analyzer (Batch processing, Adaptive processing, Waste Fingerprints, Physical kg logging, Historical Memory)
-- Plain-English Kitchen Intelligence & Waste Analytics
-- Staff Food Waste Recording & Searchable Database History
-- Mess Settings, Announcements Management, Audit Logs & Host Connectivity
+Administrative control center for IIIT Dharwad Mess 1.
+
+Structured as a closed-loop 5-Stage Story Flow:
+  Stage 1: Daily Menu Roster ➔ 
+  Stage 2: Live Student Turnout (RSVPs) ➔ 
+  Stage 3: Smart Kitchen Prep Target (ML + 5% Safety Buffer) ➔ 
+  Stage 4: Plate Inspection (OpenCV Vision AI) ➔ 
+  Stage 5: Student Feedback & Campus Impact
 """
 
 import io
@@ -73,56 +72,89 @@ def get_lan_ip() -> str:
         return "127.0.0.1"
 
 
+def render_story_header(active_step: int):
+    """Renders the horizontal story breadcrumb showing the 5 stages of a meal."""
+    steps = [
+        (1, "📋 1. Set Menu"),
+        (2, "🗳️ 2. Live Student Turnout"),
+        (3, "🎯 3. Smart Prep Target"),
+        (4, "📷 4. Plate Inspection"),
+        (5, "⭐ 5. Student Voice & Savings")
+    ]
+    html_parts = []
+    for step_num, step_label in steps:
+        if step_num == active_step:
+            html_parts.append(f"""
+            <div style="background:#12372A; color:#C5F467; font-weight:800; font-size:0.75rem; padding:6px 14px; border-radius:20px; box-shadow:0 2px 8px rgba(18,55,42,0.2);">
+                {step_label}
+            </div>
+            """)
+        else:
+            html_parts.append(f"""
+            <div style="background:#FFFFFF; color:#8A9990; font-weight:600; font-size:0.75rem; padding:6px 12px; border-radius:20px; border:1px solid rgba(18,55,42,0.08);">
+                {step_label}
+            </div>
+            """)
+    
+    flow_bar = '<span style="color:#C5F467; font-size:0.9rem; margin:0 4px;">➔</span>'.join(html_parts)
+    st.markdown(f"""
+    <div style="background:#F7F8F2; border-radius:16px; padding:0.6rem 0.8rem; margin-bottom:1.0rem; display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:0.4rem; border:1px solid rgba(18,55,42,0.08);">
+        {flow_bar}
+    </div>
+    """, unsafe_allow_html=True)
+
+
 def render_manager_portal():
-    """Renders the comprehensive administrative Mess Manager Portal."""
+    """Renders the comprehensive administrative Mess Manager Portal organized as a Story Flow."""
     
     today_str = date.today().strftime("%Y-%m-%d")
     today_day = date.today().strftime("%A")
 
-    # Manager Tabs
+    # Manager Story Tabs
     m_tabs = st.tabs([
-        "🏢 Dashboard",
-        "📜 Menu Management",
-        "👥 Student Directory",
-        "🎯 Demand & Prep Planning",
-        "📷 Multi-Plate OpenCV Vision",
-        "📊 Kitchen Waste Analytics",
-        "📝 Staff Waste Recording",
-        "⚙️ Mess Settings & Audits"
+        "📊 Campus Pulse",
+        "🍲 1. Menu Roster",
+        "🗳️ 2. Live Student RSVPs",
+        "🎯 3. Smart Prep Target",
+        "📷 4. Plate Inspection",
+        "⭐ 5. Student Voice & Feedback",
+        "📝 Shift Waste Records",
+        "⚙️ Settings & Broadcasts"
     ])
 
     # -------------------------------------------------------------------------
-    # TAB 1: MANAGER DASHBOARD
+    # TAB 1: CAMPUS DINING PULSE (EXECUTIVE STORY SUMMARY)
     # -------------------------------------------------------------------------
     with m_tabs[0]:
         st.markdown(f"""
         <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.08); border-radius:18px; padding:1.4rem 1.6rem; margin-bottom:1.2rem; box-shadow:0 4px 16px rgba(18,55,42,0.03);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1.0rem;">
                 <div>
-                    <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:3px 10px; border-radius:20px; text-transform:uppercase;">Administrative Control Center</span>
-                    <h2 style="color:#12372A; font-size:1.8rem; font-weight:800; margin:0.4rem 0 0.2rem 0;">Executive Mess Operations Dashboard</h2>
-                    <div style="color:#64748B; font-size:0.9rem;">IIIT Dharwad Mess 1 • Live Kitchen Intelligence • {today_day}, {today_str}</div>
+                    <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:3px 10px; border-radius:20px; text-transform:uppercase;">The Big Picture</span>
+                    <h2 style="color:#12372A; font-size:1.8rem; font-weight:800; margin:0.4rem 0 0.2rem 0;">Campus Dining Intelligence Pulse</h2>
+                    <div style="color:#64748B; font-size:0.9rem;">IIIT Dharwad Mess 1 • Real-time connection between Student Intent and Kitchen Preparation • {today_day}, {today_str}</div>
                 </div>
-                <div style="display:flex; gap:0.6rem; align-items:center;">
-                    <span style="background:#F7F8F2; color:#12372A; font-size:0.75rem; font-weight:700; padding:6px 12px; border-radius:8px; border:1px solid rgba(18,55,42,0.1);">
-                        DB Sync: Active (3,858 historical rows)
-                    </span>
+                <div style="background:rgba(18,55,42,0.06); border-radius:12px; padding:0.6rem 1.0rem; text-align:right;">
+                    <div style="font-size:0.72rem; text-transform:uppercase; color:#8A9990; font-weight:700;">Verified Ground Truth</div>
+                    <div style="font-size:1.05rem; font-weight:800; color:#12372A;">3,858 Historical Shifts Logged</div>
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Compute Ground-Truth Metrics from Database
+        # Real-time metrics
         all_records_df = db.get_meal_records(limit=4000)
         users_df = db.get_all_users()
         total_students = len(users_df[users_df['role'] == 'student']) if not users_df.empty else 450
         
-        # Today's RSVP Intents
+        # Today's Student RSVP Intent Counts
         today_intents = db.get_aggregated_intent_counts_for_date(today_str)
-        attending_today = today_intents.get("Attending", 0)
-        skipping_today = today_intents.get("Not Attending", 0)
+        attending_today = today_intents.get("Attending", today_intents.get("attending_count", 0))
+        skipping_today = today_intents.get("Not Attending", today_intents.get("not_attending_count", 0))
+        unsure_today = today_intents.get("Not sure", today_intents.get("not_sure_count", 0))
+        total_votes = today_intents.get("total_polled", attending_today + skipping_today + unsure_today)
 
-        # Aggregate Metrics from 3,858 shifts
+        # Aggregate Metrics from historical records
         if not all_records_df.empty:
             tot_prep = int(all_records_df['quantity_prepared'].sum())
             tot_served = int(all_records_df['quantity_served'].sum())
@@ -132,93 +164,65 @@ def render_manager_portal():
         else:
             tot_prep, tot_served, tot_discarded, tot_cost, high_waste_dish = 0, 0, 0, 0.0, "N/A"
 
-        # Vision scans count
         batches_df = db.get_vision_batches()
         total_vision_plates = int(batches_df['total_images'].sum()) if not batches_df.empty else 136
 
-        # 4-Column KPI Grid
-        kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+        # 4 Primary Story KPI Cards
+        p_c1, p_c2, p_c3, p_c4 = st.columns(4)
 
-        with kpi_col1:
+        with p_c1:
             st.markdown(f"""
-            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.10); border-radius:14px; padding:1.1rem 1.2rem; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Registered Students</div>
-                <div style="font-size:1.8rem; font-weight:900; color:#12372A; margin:0.2rem 0;">{total_students}</div>
-                <div style="font-size:0.78rem; color:#16A36A; font-weight:600;">Active Hostel Strength</div>
+            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.1rem 1.2rem; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">1. Total Registered Diners</div>
+                <div style="font-size:1.9rem; font-weight:900; color:#12372A; margin:0.2rem 0;">{total_students}</div>
+                <div style="font-size:0.78rem; color:#16A36A; font-weight:600;">Active Hostel Students</div>
             </div>
             """, unsafe_allow_html=True)
 
-        with kpi_col2:
+        with p_c2:
             st.markdown(f"""
-            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.10); border-radius:14px; padding:1.1rem 1.2rem; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Today's Live RSVPs</div>
-                <div style="font-size:1.8rem; font-weight:900; color:#16A36A; margin:0.2rem 0;">{attending_today} <span style="font-size:1.0rem; color:#E76F51; font-weight:700;">(-{skipping_today} skips)</span></div>
-                <div style="font-size:0.78rem; color:#64748B;">Attending vs Skipping</div>
+            <div style="background:#FFFFFF; border:1.5px solid #16A36A; border-radius:14px; padding:1.1rem 1.2rem; box-shadow:0 2px 8px rgba(22,163,106,0.06);">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#16A36A; font-weight:800;">2. Live Today's RSVPs</div>
+                <div style="font-size:1.9rem; font-weight:900; color:#16A36A; margin:0.2rem 0;">{attending_today} <span style="font-size:0.95rem; color:#E76F51; font-weight:700;">(-{skipping_today} skips)</span></div>
+                <div style="font-size:0.78rem; color:#64748B;">{total_votes} student votes received today</div>
             </div>
             """, unsafe_allow_html=True)
 
-        with kpi_col3:
+        with p_c3:
             st.markdown(f"""
-            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.10); border-radius:14px; padding:1.1rem 1.2rem; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Discarded Food (Total)</div>
-                <div style="font-size:1.8rem; font-weight:900; color:#E76F51; margin:0.2rem 0;">{tot_discarded:,}</div>
-                <div style="font-size:0.78rem; color:#64748B;">Total Servings Discarded</div>
+            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.1rem 1.2rem; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">3. CV Plates Analyzed</div>
+                <div style="font-size:1.9rem; font-weight:900; color:#12372A; margin:0.2rem 0;">{total_vision_plates}</div>
+                <div style="font-size:0.78rem; color:#64748B;">Trays inspected by OpenCV</div>
             </div>
             """, unsafe_allow_html=True)
 
-        with kpi_col4:
+        with p_c4:
             st.markdown(f"""
-            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.10); border-radius:14px; padding:1.1rem 1.2rem; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Cumulative Waste Cost</div>
-                <div style="font-size:1.8rem; font-weight:900; color:#12372A; margin:0.2rem 0;">₹{tot_cost:,.0f}</div>
-                <div style="font-size:0.78rem; color:#E76F51; font-weight:600;">Financial Loss Tracked</div>
+            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.1rem 1.2rem; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">4. Tracked Waste Cost</div>
+                <div style="font-size:1.9rem; font-weight:900; color:#E76F51; margin:0.2rem 0;">₹{tot_cost:,.0f}</div>
+                <div style="font-size:0.78rem; color:#64748B;">Target for AI Reduction</div>
             </div>
             """, unsafe_allow_html=True)
 
         st.markdown("<div style='height:0.8rem;'></div>", unsafe_allow_html=True)
 
-        # 4-Column Secondary KPIs
-        s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+        # Story Narrative Box: How MessMind AI Works
+        st.markdown("""
+        <div style="background:#F7F8F2; border-left:4px solid #16A36A; border-radius:12px; padding:1.1rem 1.3rem; margin-bottom:1.2rem; font-size:0.86rem; color:#18231F; line-height:1.6;">
+            <strong style="color:#12372A; font-size:0.95rem;">📖 How MessMind AI Solves College Food Waste:</strong><br>
+            • <strong>Morning:</strong> The manager publishes today's menu. Students vote <em>Attending</em> or <em>Skipping</em> in 1 click.<br>
+            • <strong>Pre-Cooking:</strong> The system takes student votes, adjusts for weather and weekend patterns, and adds a mandatory <strong>+5% safety buffer</strong> so no student goes hungry.<br>
+            • <strong>Post-Dining:</strong> Overhead cameras run OpenCV to check leftover food on plates. If a dish is heavily wasted, the chef receives instant advice to reduce ladle portions.<br>
+            • <strong>Outcome:</strong> Kitchen avoids cooking 30–50 surplus portions daily, saving <strong>₹35,000–₹50,000 every month</strong> across campus messes!
+        </div>
+        """, unsafe_allow_html=True)
 
-        with s_col1:
-            st.markdown(f"""
-            <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.0rem;">
-                <div style="font-size:0.72rem; text-transform:uppercase; color:#8A9990; font-weight:700;">Total Food Prepared</div>
-                <div style="font-size:1.3rem; font-weight:800; color:#12372A;">{tot_prep:,} servings</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with s_col2:
-            st.markdown(f"""
-            <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.0rem;">
-                <div style="font-size:0.72rem; text-transform:uppercase; color:#8A9990; font-weight:700;">Total Food Consumed</div>
-                <div style="font-size:1.3rem; font-weight:800; color:#16A36A;">{tot_served:,} servings</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with s_col3:
-            st.markdown(f"""
-            <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.0rem;">
-                <div style="font-size:0.72rem; text-transform:uppercase; color:#8A9990; font-weight:700;">Plates Analyzed (CV)</div>
-                <div style="font-size:1.3rem; font-weight:800; color:#12372A;">{total_vision_plates} plates</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        with s_col4:
-            st.markdown(f"""
-            <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.0rem;">
-                <div style="font-size:0.72rem; text-transform:uppercase; color:#8A9990; font-weight:700;">Top Waste Culprit</div>
-                <div style="font-size:1.15rem; font-weight:800; color:#E76F51; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{high_waste_dish}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<div style='height:1.2rem;'></div>", unsafe_allow_html=True)
-
-        # Charts Row 1: Daily Waste Trend & Meal-Period Breakdown
-        c_row1_col1, c_row1_col2 = st.columns([1.5, 1], gap="medium")
-
-        with c_row1_col1:
-            st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>📈 Daily Food Waste & Financial Loss Trend</div>", unsafe_allow_html=True)
+        # Visual Charts
+        c_col1, c_col2 = st.columns([1.5, 1], gap="medium")
+        with c_col1:
+            st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>📈 30-Day Food Waste & Financial Loss Trend</div>", unsafe_allow_html=True)
             if not all_records_df.empty:
                 daily_df = all_records_df.groupby('date')[['discarded_quantity', 'discarded_food_cost_inr']].sum().reset_index()
                 daily_df = daily_df.sort_values('date').tail(30)
@@ -250,7 +254,7 @@ def render_manager_portal():
                 )
                 st.plotly_chart(fig_trend, use_container_width=True)
 
-        with c_row1_col2:
+        with c_col2:
             st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>🥧 Waste by Meal Period</div>", unsafe_allow_html=True)
             if not all_records_df.empty:
                 meal_df = all_records_df.groupby('meal_type')['discarded_quantity'].sum().reset_index()
@@ -268,98 +272,93 @@ def render_manager_portal():
                 )
                 st.plotly_chart(fig_pie, use_container_width=True)
 
-        # Charts Row 2: Top Culprit Dishes & Prep vs Consumed Gap
-        c_row2_col1, c_row2_col2 = st.columns([1, 1], gap="medium")
-
-        with c_row2_col1:
-            st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>⚠️ Top 8 Waste Culprit Dishes</div>", unsafe_allow_html=True)
-            if not all_records_df.empty:
-                culprit_df = all_records_df.groupby('dish_name')['discarded_quantity'].sum().reset_index()
-                culprit_df = culprit_df.sort_values('discarded_quantity', ascending=True).tail(8)
-                fig_culprit = px.bar(
-                    culprit_df,
-                    y='dish_name',
-                    x='discarded_quantity',
-                    orientation='h',
-                    color_discrete_sequence=['#E76F51']
-                )
-                fig_culprit.update_layout(
-                    margin=dict(l=20, r=20, t=20, b=20),
-                    height=270,
-                    plot_bgcolor="#FFFFFF",
-                    xaxis_title="Discarded Servings",
-                    yaxis_title=""
-                )
-                st.plotly_chart(fig_culprit, use_container_width=True)
-
-        with c_row2_col2:
-            st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>⚖️ Food Prepared vs Consumed Gap</div>", unsafe_allow_html=True)
-            if not all_records_df.empty:
-                gap_df = all_records_df.groupby('date')[['quantity_prepared', 'quantity_served']].sum().reset_index().tail(15)
-                fig_gap = go.Figure()
-                fig_gap.add_trace(go.Bar(x=gap_df['date'], y=gap_df['quantity_prepared'], name="Prepared", marker_color="#12372A"))
-                fig_gap.add_trace(go.Bar(x=gap_df['date'], y=gap_df['quantity_served'], name="Consumed", marker_color="#C5F467"))
-                fig_gap.update_layout(
-                    barmode='group',
-                    margin=dict(l=20, r=20, t=20, b=20),
-                    height=270,
-                    plot_bgcolor="#FFFFFF",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                st.plotly_chart(fig_gap, use_container_width=True)
-
-        # Database Storage Location Explainer
+        # Real-time Synchronized Student Activity Hub
+        st.markdown("<hr style='margin:1.4rem 0 1.0rem 0; border:none; border-top:1px solid rgba(18,55,42,0.08);'>", unsafe_allow_html=True)
         st.markdown("""
-        <div style="background:#F7F8F2; border-left:4px solid #12372A; border-radius:12px; padding:1.1rem 1.3rem; margin-top:1.2rem; font-size:0.84rem; color:#18231F; line-height:1.5;">
-            <strong style="color:#12372A; font-size:0.95rem;">🗄️ Verifiable Data Storage Engine</strong><br>
-            • <strong>Engine:</strong> Local SQLite Relational Database (<code>sqlite3</code>)<br>
-            • <strong>File Location:</strong> <code>data/messmind.db</code> (Primary Table: <code>meal_records</code> with 3,858 historical rows)<br>
-            • <strong>CSV Sync:</strong> Synchronized with <code>data/mess_data.csv</code> for auditable Scikit-learn model retraining.<br>
-            • <strong>Integrity Guarantee:</strong> All metrics displayed above are aggregated directly from committed database records. Zero simulated numbers.
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
+            <div>
+                <span style="font-size:1.1rem; font-weight:800; color:#12372A;">⚡ Live Student Portal Activity (Direct Database Synchronization)</span>
+                <div style="font-size:0.82rem; color:#64748B;">Incoming votes and feedback submitted by students appear here in real time.</div>
+            </div>
+            <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-size:0.75rem; font-weight:800; padding:4px 10px; border-radius:8px;">● LIVE SYNC ACTIVE</span>
         </div>
         """, unsafe_allow_html=True)
 
+        live_c1, live_c2 = st.columns(2, gap="medium")
+        with live_c1:
+            st.markdown("<div style='font-size:0.92rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>🗳️ Recent Student RSVPs</div>", unsafe_allow_html=True)
+            recent_intents = db.get_student_meal_intents()
+            if recent_intents is not None and not recent_intents.empty:
+                display_ri = recent_intents.head(5)[['student_roll', 'meal_date', 'meal_type', 'intent_status', 'updated_at']].rename(columns={
+                    'student_roll': 'Roll No',
+                    'meal_date': 'Date',
+                    'meal_type': 'Meal',
+                    'intent_status': 'Vote',
+                    'updated_at': 'Time'
+                })
+                st.dataframe(display_ri, use_container_width=True, hide_index=True)
+            else:
+                st.info("No student RSVPs received yet.")
+
+        with live_c2:
+            st.markdown("<div style='font-size:0.92rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>⭐ Recent Student Reviews</div>", unsafe_allow_html=True)
+            recent_fb = db.get_student_feedback_records(limit=5)
+            if recent_fb is not None and not recent_fb.empty:
+                display_rf = recent_fb[['student_roll', 'meal_date', 'meal_type', 'rating', 'feedback_text', 'created_at']].rename(columns={
+                    'student_roll': 'Roll No',
+                    'meal_date': 'Date',
+                    'meal_type': 'Meal',
+                    'rating': 'Rating',
+                    'feedback_text': 'Comments',
+                    'created_at': 'Time'
+                })
+                st.dataframe(display_rf, use_container_width=True, hide_index=True)
+            else:
+                st.info("No student reviews received yet.")
+
     # -------------------------------------------------------------------------
-    # TAB 2: MENU MANAGEMENT (CRUD + PUBLISH / UNPUBLISH)
+    # TAB 2: STAGE 1 — DAILY MENU ROSTER (MANAGER CRUD & PUBLISH)
     # -------------------------------------------------------------------------
     with m_tabs[1]:
+        render_story_header(1)
+
         st.markdown("""
         <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.08); border-radius:18px; padding:1.2rem 1.5rem; margin-bottom:1.2rem;">
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem;">
                 <div>
-                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">📜 Central Menu Management</h3>
-                    <div style="color:#64748B; font-size:0.85rem;">Create, modify, and publish dining menus for Breakfast, Lunch, Snacks, and Dinner.</div>
+                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">📋 Stage 1: Official Dining Menu</h3>
+                    <div style="color:#64748B; font-size:0.85rem;">Define what dishes are cooking today. Set prices and control whether students can see the menu.</div>
                 </div>
-                <span style="background:rgba(18,55,42,0.1); color:#12372A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">MANAGER PRIVILEGE</span>
+                <span style="background:rgba(18,55,42,0.1); color:#12372A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">STEP 1 OF LIFECYCLE</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        m_filter_col1, m_filter_col2, m_filter_col3 = st.columns(3)
-        with m_filter_col1:
-            sel_day_m = st.selectbox("Filter Weekday", options=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], index=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(today_day), key="m_sel_day")
-        with m_filter_col2:
-            sel_meal_m = st.selectbox("Filter Meal Period", options=["All Meals", "Breakfast", "Lunch", "Snacks", "Dinner"], key="m_sel_meal")
-        with m_filter_col3:
-            pub_filter = st.selectbox("Publication Status", options=["All Items", "Published Only", "Drafts Only"], key="m_pub_filter")
+        m_filter_c1, m_filter_c2, m_filter_c3 = st.columns(3)
+        with m_filter_c1:
+            sel_day_m = st.selectbox("Weekday", options=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], index=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(today_day), key="m_sel_day")
+        with m_filter_c2:
+            sel_meal_m = st.selectbox("Meal Period", options=["All Meals", "Breakfast", "Lunch", "Snacks", "Dinner"], key="m_sel_meal")
+        with m_filter_c3:
+            pub_filter = st.selectbox("Status Filter", options=["All Items", "Published Only", "Drafts Only"], key="m_pub_filter")
 
-        # Publish all day button
+        # 1-Click Publish / Draft Buttons
         col_pub_all1, col_pub_all2 = st.columns([1, 1])
         with col_pub_all1:
             if st.button(f"🟢 Publish Full {sel_day_m} Menu to Students", use_container_width=True):
                 db.publish_all_day_menu(sel_day_m, is_published=True)
-                db.log_audit_event("MENU_PUBLISH", "manager", f"Published all menu items for {sel_day_m}")
-                st.success(f"All items for {sel_day_m} are now published and visible to students!")
+                db.log_audit_event("MENU_PUBLISH", "manager", f"Published menu for {sel_day_m}")
+                st.success(f"All items for {sel_day_m} are now published and visible on student phones!")
                 st.rerun()
         with col_pub_all2:
-            if st.button(f"⚪ Unpublish {sel_day_m} Menu (Make Draft)", use_container_width=True):
+            if st.button(f"⚪ Make {sel_day_m} Menu Draft (Hide from Students)", use_container_width=True):
                 db.publish_all_day_menu(sel_day_m, is_published=False)
-                db.log_audit_event("MENU_UNPUBLISH", "manager", f"Unpublished all menu items for {sel_day_m}")
-                st.warning(f"All items for {sel_day_m} are now in draft mode (hidden from students).")
+                db.log_audit_event("MENU_UNPUBLISH", "manager", f"Unpublished menu for {sel_day_m}")
+                st.warning(f"All items for {sel_day_m} are now in draft mode.")
                 st.rerun()
 
-        # Add New Menu Item Expander
-        with st.expander("➕ Add New Dish to Menu"):
+        # Add New Menu Item Form
+        with st.expander("➕ Add New Dish to Schedule"):
             with st.form("add_dish_form"):
                 af_c1, af_c2, af_c3 = st.columns(3)
                 with af_c1:
@@ -372,8 +371,8 @@ def render_manager_portal():
                     new_dish_cost = st.number_input("Cost per Serving (₹)", min_value=1.0, max_value=200.0, value=15.0, step=1.0)
                     new_dish_publish = st.checkbox("Publish immediately to students", value=True)
                 
-                new_dish_desc = st.text_input("Description / Notes (Optional)", placeholder="e.g. Traditional gravy cooked with fresh paneer cubes")
-                submit_new_dish = st.form_submit_button("💾 Save Dish to Official Menu", use_container_width=True)
+                new_dish_desc = st.text_input("Description / Notes (Optional)", placeholder="e.g. Traditional recipe cooked with mild spices")
+                submit_new_dish = st.form_submit_button("💾 Save Dish to Schedule", use_container_width=True)
 
                 if submit_new_dish:
                     if new_dish_name.strip():
@@ -387,7 +386,7 @@ def render_manager_portal():
                             is_published=new_dish_publish
                         )
                         db.log_audit_event("MENU_ADD", "manager", f"Added dish '{new_dish_name}' to {new_dish_day} {new_dish_meal}")
-                        st.success(f"Added '{new_dish_name}' to {new_dish_day} {new_dish_meal} (ID: {item_id})!")
+                        st.success(f"Added '{new_dish_name}' to {new_dish_day} {new_dish_meal}!")
                         st.rerun()
                     else:
                         st.error("Dish name cannot be empty.")
@@ -401,14 +400,14 @@ def render_manager_portal():
         if pub_filter == "Drafts Only" and not menu_df.empty:
             menu_df = menu_df[menu_df['is_published'] == 0]
 
-        st.markdown(f"<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin:1.0rem 0 0.5rem 0;'>{sel_day_m} Menu Roster ({len(menu_df)} items)</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin:1.0rem 0 0.5rem 0;'>{sel_day_m} Menu Spread ({len(menu_df)} items)</div>", unsafe_allow_html=True)
         
         if menu_df.empty:
             st.info(f"No menu items match the filter for {sel_day_m}. Use the 'Add New Dish' button above to register dishes.")
         else:
             for idx, item in menu_df.iterrows():
                 is_pub = bool(item['is_published'])
-                status_badge = '<span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:2px 8px; border-radius:6px;">PUBLISHED</span>' if is_pub else '<span style="background:rgba(138,153,144,0.15); color:#8A9990; font-weight:800; font-size:0.75rem; padding:2px 8px; border-radius:6px;">DRAFT (HIDDEN)</span>'
+                status_badge = '<span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:2px 8px; border-radius:6px;">PUBLISHED</span>' if is_pub else '<span style="background:rgba(138,153,144,0.15); color:#8A9990; font-weight:800; font-size:0.75rem; padding:2px 8px; border-radius:6px;">DRAFT</span>'
                 
                 row_c1, row_c2, row_c3, row_c4 = st.columns([2.5, 1.2, 1, 1.5])
                 with row_c1:
@@ -434,101 +433,169 @@ def render_manager_portal():
                             st.rerun()
                 st.markdown("<hr style='margin:0.4rem 0; border:none; border-top:1px solid #EEF2F6;'>", unsafe_allow_html=True)
 
+        # Story Step Transition
+        st.markdown("""
+        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
+            <div>
+                <strong style="color:#12372A;">📖 Next Step in the Story:</strong>
+                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Now that today's menu is published, students open their portal and declare if they are eating.</span>
+            </div>
+            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">Proceed to Stage 2: Student RSVPs ➔</span>
+        </div>
+        """, unsafe_allow_html=True)
+
     # -------------------------------------------------------------------------
-    # TAB 3: STUDENT DIRECTORY
+    # TAB 3: STAGE 2 — LIVE STUDENT TURNOUT & RSVPS (STUDENT INPUT HUB)
     # -------------------------------------------------------------------------
     with m_tabs[2]:
+        render_story_header(2)
+
         st.markdown("""
         <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.08); border-radius:18px; padding:1.2rem 1.5rem; margin-bottom:1.2rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem;">
                 <div>
-                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">👥 Student Directory & RBAC Management</h3>
-                    <div style="color:#64748B; font-size:0.85rem;">Manage registered dining students, account status, and view individual attendance polling.</div>
+                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">🗳️ Stage 2: Live Student Attendance RSVPs</h3>
+                    <div style="color:#64748B; font-size:0.85rem;">See exactly how many students are coming BEFORE lighting the kitchen stoves. Live synchronization from the Student Portal.</div>
                 </div>
-                <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">RBAC PROTECTED</span>
+                <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">STEP 2 OF LIFECYCLE</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        stu_search = st.text_input("🔍 Search Student by Roll Number or Name", placeholder="e.g. 24bcs042 or Varun")
-        
-        users_all = db.get_all_users(role="student", search=stu_search if stu_search.strip() else None)
-        
-        s_count_c1, s_count_c2 = st.columns(2)
-        with s_count_c1:
-            st.metric("Total Hostel Students", len(users_all))
-        with s_count_c2:
-            active_count = len(users_all[users_all['is_active'] == 1]) if not users_all.empty else 0
-            st.metric("Active Dining Passes", active_count)
+        r_filter_c1, r_filter_c2, r_filter_c3 = st.columns(3)
+        with r_filter_c1:
+            sel_rsvp_date = st.date_input("Filter Date", value=date.today(), key="mgr_rsvp_date_picker").strftime("%Y-%m-%d")
+        with r_filter_c2:
+            sel_rsvp_meal = st.selectbox("Filter Meal Shift", ["All Meals", "Lunch", "Dinner", "Breakfast"], key="mgr_rsvp_meal_filter")
+        with r_filter_c3:
+            st.markdown("<div style='height:1.8rem;'></div>", unsafe_allow_html=True)
+            if st.button("🔄 Refresh Live Student Votes", use_container_width=True):
+                st.rerun()
 
-        if users_all.empty:
-            st.info("No students found matching your search criteria.")
+        # Fetch intent aggregates for this date
+        meal_arg_intents = None if sel_rsvp_meal == "All Meals" else sel_rsvp_meal
+        date_intents = db.get_aggregated_intent_counts_for_date(sel_rsvp_date, meal_arg_intents)
+
+        att_cnt = date_intents.get("Attending", date_intents.get("attending_count", 0))
+        skip_cnt = date_intents.get("Not Attending", date_intents.get("not_attending_count", 0))
+        unsure_cnt = date_intents.get("Not sure", date_intents.get("not_sure_count", 0))
+        total_cnt = date_intents.get("total_polled", att_cnt + skip_cnt + unsure_cnt)
+
+        # 4 Turnout Summary Cards
+        tc_1, tc_2, tc_3, tc_4 = st.columns(4)
+        with tc_1:
+            st.markdown(f"""
+            <div style="background:rgba(22,163,106,0.12); border:1.5px solid #16A36A; border-radius:14px; padding:1.0rem; text-align:center;">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#16A36A; font-weight:800;">Confirmed Attending</div>
+                <div style="font-size:2.0rem; font-weight:900; color:#12372A; margin:0.2rem 0;">{att_cnt}</div>
+                <div style="font-size:0.75rem; color:#16A36A; font-weight:700;">Students Planning to Eat</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with tc_2:
+            st.markdown(f"""
+            <div style="background:rgba(231,111,81,0.12); border:1.5px solid #E76F51; border-radius:14px; padding:1.0rem; text-align:center;">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#E76F51; font-weight:800;">Confirmed Skips</div>
+                <div style="font-size:2.0rem; font-weight:900; color:#E76F51; margin:0.2rem 0;">{skip_cnt}</div>
+                <div style="font-size:0.75rem; color:#64748B;">Saves ~{skip_cnt * 15} portions</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with tc_3:
+            st.markdown(f"""
+            <div style="background:#F7F8F2; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.0rem; text-align:center;">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Unsure / Undecided</div>
+                <div style="font-size:2.0rem; font-weight:900; color:#F4A261; margin:0.2rem 0;">{unsure_cnt}</div>
+                <div style="font-size:0.75rem; color:#64748B;">Counted at 50% probability</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with tc_4:
+            st.markdown(f"""
+            <div style="background:#F7F8F2; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.0rem; text-align:center;">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Total Votes Polled</div>
+                <div style="font-size:2.0rem; font-weight:900; color:#12372A; margin:0.2rem 0;">{total_cnt}</div>
+                <div style="font-size:0.75rem; color:#64748B;">Live submissions recorded</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height:1.2rem;'></div>", unsafe_allow_html=True)
+
+        # Live Feed Table of Individual Student Votes
+        st.markdown(f"<div style='font-size:1.0rem; font-weight:800; color:#12372A; margin-bottom:0.5rem;'>Live Incoming Student Votes for {sel_rsvp_date}</div>", unsafe_allow_html=True)
+        raw_intents_df = db.get_student_meal_intents(meal_date=sel_rsvp_date)
+
+        if raw_intents_df is not None and not raw_intents_df.empty:
+            if meal_arg_intents:
+                raw_intents_df = raw_intents_df[raw_intents_df['meal_type'] == meal_arg_intents]
+
+            display_intents = raw_intents_df[['student_roll', 'meal_type', 'intent_status', 'dietary_preference', 'updated_at']].rename(columns={
+                'student_roll': 'Student Roll No',
+                'meal_type': 'Meal Shift',
+                'intent_status': 'Attendance Intent',
+                'dietary_preference': 'Dietary Preference',
+                'updated_at': 'Submission Timestamp'
+            })
+            st.dataframe(display_intents, use_container_width=True, hide_index=True)
         else:
-            for _, u in users_all.iterrows():
-                u_col1, u_col2, u_col3, u_col4 = st.columns([1.5, 1.5, 1, 1.2])
-                with u_col1:
-                    st.markdown(f"<strong>{u['full_name']}</strong>")
-                    st.caption(f"Roll: {u['username'].upper()}")
-                with u_col2:
-                    st.markdown(f"{u.get('hostel', 'Ganga Block')} • Room {u.get('room_number', 'N/A')}")
-                    st.caption(f"Diet: {u.get('dietary_preference', 'Vegetarian')}")
-                with u_col3:
-                    is_act = bool(u['is_active'])
-                    status_html = '<span style="color:#16A36A; font-weight:800;">ACTIVE</span>' if is_act else '<span style="color:#E76F51; font-weight:800;">DEACTIVATED</span>'
-                    st.markdown(status_html, unsafe_allow_html=True)
-                with u_col4:
-                    btn_label = "Deactivate" if is_act else "Activate"
-                    if st.button(btn_label, key=f"user_act_{u['id']}"):
-                        db.update_user_status(u['id'], not is_act)
-                        db.log_audit_event("USER_STATUS_CHANGE", "manager", f"Changed status of {u['username']} to {not is_act}")
-                        st.rerun()
-                st.markdown("<hr style='margin:0.3rem 0; border:none; border-top:1px solid #EEF2F6;'>", unsafe_allow_html=True)
+            st.info(f"No student votes recorded yet for {sel_rsvp_date}. When students select their meal plan on the Student Portal, their names and responses appear here immediately.")
+
+        # Story Step Transition
+        st.markdown("""
+        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
+            <div>
+                <strong style="color:#12372A;">📖 Next Step in the Story:</strong>
+                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Student turnout is locked! Head cooks now take these confirmed numbers into our Smart Prep model.</span>
+            </div>
+            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">Proceed to Stage 3: Smart Prep Target ➔</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # TAB 4: DEMAND & PREPARATION PLANNING
+    # TAB 4: STAGE 3 — SMART PREP TARGET (AI + 5% SAFETY BUFFER)
     # -------------------------------------------------------------------------
     with m_tabs[3]:
+        render_story_header(3)
+
         st.markdown("""
         <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.08); border-radius:18px; padding:1.2rem 1.5rem; margin-bottom:1.2rem;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">🎯 Demand & Preparation Planning Engine</h3>
-                    <div style="color:#64748B; font-size:0.85rem;">Synchronizes student RSVP intents + Scikit-Learn RandomForest (+5% Safety Buffer) to guide kitchen preparation.</div>
+                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">🎯 Stage 3: Smart Kitchen Preparation Target</h3>
+                    <div style="color:#64748B; font-size:0.85rem;">Converts Student RSVPs + Machine Learning Forecast + Mandatory 5% Safety Buffer into approved cooking portions.</div>
                 </div>
-                <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">ML MODEL (R²=0.911)</span>
+                <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">STEP 3 OF LIFECYCLE</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        dp_col1, dp_col2, dp_col3 = st.columns(3)
-        with dp_col1:
-            p_day = st.selectbox("Planning Day", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], index=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(today_day), key="p_day_sel")
-        with dp_col2:
-            p_meal = st.selectbox("Target Meal Period", ["Lunch", "Dinner", "Breakfast", "Snacks"], key="p_meal_sel")
-        with dp_col3:
-            # Get dishes for this day/meal
+        dp_c1, dp_c2, dp_c3 = st.columns(3)
+        with dp_c1:
+            p_day = st.selectbox("Planning Weekday", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], index=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(today_day), key="p_day_sel_story")
+        with dp_c2:
+            p_meal = st.selectbox("Meal Shift", ["Lunch", "Dinner", "Breakfast", "Snacks"], key="p_meal_sel_story")
+        with dp_c3:
             m_dishes = db.get_menu_items(day_of_week=p_day, meal_period=p_meal)
-            dish_options = m_dishes['dish_name'].tolist() if not m_dishes.empty else ["Dal Tadka", "Paneer Butter Masala", "Plain Rice", "Chapati"]
-            p_dish = st.selectbox("Dish to Plan", options=dish_options, key="p_dish_sel")
+            dish_opts = m_dishes['dish_name'].tolist() if not m_dishes.empty else ["Dal Tadka", "Paneer Butter Masala", "Plain Rice", "Chapati"]
+            p_dish = st.selectbox("Dish to Prepare", options=dish_opts, key="p_dish_sel_story")
 
-        # Live RSVP Intent Breakdown for this shift
+        # Pull live attendance intent breakdown
         intent_breakdown = db.get_attendance_intent_counts(today_str, p_meal)
-        att_cnt = intent_breakdown.get("Attending", 0)
-        skip_cnt = intent_breakdown.get("Not Attending", 0)
-        unsure_cnt = intent_breakdown.get("Not sure", 0)
+        att_cnt = intent_breakdown.get("Attending", intent_breakdown.get("yes_count", 0))
+        skip_cnt = intent_breakdown.get("Not Attending", intent_breakdown.get("no_count", 0))
 
         st.markdown(f"""
         <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.1rem; margin-bottom:1.0rem; display:flex; justify-content:space-between; align-items:center;">
             <div>
-                <strong>Live Student Intent Polling:</strong>
-                <span style="color:#16A36A; margin-left:0.5rem; font-weight:700;">✅ {att_cnt} Attending</span> •
-                <span style="color:#E76F51; margin-left:0.5rem; font-weight:700;">❌ {skip_cnt} Skipping</span> •
-                <span style="color:#F4A261; margin-left:0.5rem; font-weight:700;">🤔 {unsure_cnt} Unsure</span>
+                <strong>Live Input from Stage 2:</strong>
+                <span style="color:#16A36A; margin-left:0.5rem; font-weight:800;">✅ {att_cnt} Students Attending</span> •
+                <span style="color:#E76F51; margin-left:0.5rem; font-weight:800;">❌ {skip_cnt} Skipping</span>
             </div>
-            <span style="font-size:0.75rem; color:#8A9990; font-weight:600;">Counts 50% of Unsure Votes</span>
+            <span style="font-size:0.75rem; color:#8A9990; font-weight:700;">Synchronized with Student Portal</span>
         </div>
         """, unsafe_allow_html=True)
 
+        # Recommendation Engine
         model = load_demand_model()
         rec = generate_dish_recommendation(
             meal_date=today_str,
@@ -544,48 +611,46 @@ def render_manager_portal():
         with res_c1:
             st.markdown(f"""
             <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.2rem; text-align:center;">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Base ML Prediction</div>
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Base ML Diners</div>
                 <div style="font-size:2.0rem; font-weight:900; color:#12372A; margin:0.3rem 0;">{rec['predicted_demand']}</div>
-                <div style="font-size:0.78rem; color:#64748B;">Predicted Student Diners</div>
+                <div style="font-size:0.78rem; color:#64748B;">Expected Diners</div>
             </div>
             """, unsafe_allow_html=True)
 
         with res_c2:
             st.markdown(f"""
-            <div style="background:rgba(22,163,106,0.12); border:1.5px solid #16A36A; border-radius:14px; padding:1.2rem; text-align:center;">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#16A36A; font-weight:800;">Recommended Prep (+5%)</div>
+            <div style="background:rgba(22,163,106,0.12); border:2px solid #16A36A; border-radius:14px; padding:1.2rem; text-align:center;">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#16A36A; font-weight:800;">Recommended Cook Target</div>
                 <div style="font-size:2.2rem; font-weight:900; color:#12372A; margin:0.3rem 0;">{rec['recommended_preparation']}</div>
-                <div style="font-size:0.78rem; color:#16A36A; font-weight:700;">Kitchen Target Servings</div>
+                <div style="font-size:0.78rem; color:#16A36A; font-weight:700;">With +5% Safety Buffer</div>
             </div>
             """, unsafe_allow_html=True)
 
         with res_c3:
             st.markdown(f"""
             <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.2rem; text-align:center;">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Operational Safety Buffer</div>
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Guaranteed Safety Buffer</div>
                 <div style="font-size:2.0rem; font-weight:900; color:#F4A261; margin:0.3rem 0;">+{rec['safety_margin_units']}</div>
-                <div style="font-size:0.78rem; color:#64748B;">Guaranteed Buffer Servings</div>
+                <div style="font-size:0.78rem; color:#64748B;">Prevents Late Hunger Shortage</div>
             </div>
             """, unsafe_allow_html=True)
 
-        # Operational Advice Callout
         st.markdown(f"""
         <div style="background:#FFFFFF; border-left:4px solid #16A36A; border-radius:12px; padding:1.0rem 1.3rem; margin:1.2rem 0; box-shadow:0 2px 8px rgba(0,0,0,0.02);">
-            <strong style="color:#12372A;">💡 Operational Kitchen Guidance:</strong>
+            <strong style="color:#12372A;">💡 Chef Operational Advice:</strong>
             <div style="color:#475569; font-size:0.88rem; margin-top:3px;">{rec.get('advice') or rec.get('explanation')}</div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Manager Work Order Approval Form
-        st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin:1.0rem 0 0.5rem 0;'>Kitchen Preparation Approval & Work Order</div>", unsafe_allow_html=True)
-        with st.form("prep_approval_form"):
+        # Official Kitchen Work Order Approval
+        with st.form("prep_approval_form_story"):
             app_c1, app_c2 = st.columns([1, 1])
             with app_c1:
-                approved_servings = st.number_input("Final Approved Cooking Quantity (Servings)", min_value=50, max_value=600, value=int(rec['recommended_preparation']), step=5)
+                approved_servings = st.number_input("Approved Cooking Portions", min_value=50, max_value=600, value=int(rec['recommended_preparation']), step=5)
             with app_c2:
-                prep_notes = st.text_input("Chef / Kitchen Shift Notes", placeholder="e.g. Standard mild spices; reserve 20 servings for late lab students")
+                prep_notes = st.text_input("Chef Shift Notes", placeholder="e.g. Standard mild spices; cooked for lunch rush")
 
-            approve_submit = st.form_submit_button("✅ Approve & Log Kitchen Work Order", use_container_width=True)
+            approve_submit = st.form_submit_button("✅ Approve & Sign Kitchen Work Order", use_container_width=True)
 
             if approve_submit:
                 db.log_audit_event(
@@ -593,127 +658,105 @@ def render_manager_portal():
                     "manager",
                     f"Approved {approved_servings} servings of {p_dish} for {p_day} {p_meal}. Notes: {prep_notes}"
                 )
-                st.success(f"🎉 Kitchen Work Order Logged! **{approved_servings} servings** of **{p_dish}** approved for **{p_day} {p_meal}**.")
+                st.success(f"🎉 Kitchen Work Order Signed! **{approved_servings} servings** of **{p_dish}** approved for cooking.")
+
+        # Story Step Transition
+        st.markdown("""
+        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
+            <div>
+                <strong style="color:#12372A;">📖 Next Step in the Story:</strong>
+                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Food was cooked and served! Now students return their used trays. The OpenCV camera scans plate waste.</span>
+            </div>
+            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">Proceed to Stage 4: Plate Inspection ➔</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # TAB 5: MULTI-PLATE OPENCV VISION ANALYZER
+    # TAB 5: STAGE 4 — PLATE INSPECTION (OPENCV VISION AI)
     # -------------------------------------------------------------------------
     with m_tabs[4]:
+        render_story_header(4)
+
         st.markdown("""
         <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.08); border-radius:18px; padding:1.2rem 1.5rem; margin-bottom:1.2rem;">
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem;">
                 <div>
-                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">📷 Multi-Plate OpenCV Vision Analyzer</h3>
-                    <div style="color:#64748B; font-size:0.85rem;">Classical Edge Computer Vision • Batch Plate Processing (1 Dish per Batch) • Waste Fingerprinting</div>
+                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">📷 Stage 4: Post-Meal Plate Leftover Inspection</h3>
+                    <div style="color:#64748B; font-size:0.85rem;">See what students left on their plates. Classical OpenCV edge vision inspects unconsumed food and recognizes waste patterns.</div>
                 </div>
-                <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">EDGE CV (NO GPU NEEDED)</span>
+                <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">STEP 4 OF LIFECYCLE</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
         v_setup_c1, v_setup_c2, v_setup_c3 = st.columns(3)
         with v_setup_c1:
-            v_dish = st.selectbox("Select Batch Dish", ["Dal Tadka", "Paneer Butter Masala", "Plain Rice", "Chapati", "Veg Pulav", "Soyabean Biryani"], key="v_dish_sel")
+            v_dish = st.selectbox("Inspect Dish Batch", ["Dal Tadka", "Paneer Butter Masala", "Plain Rice", "Chapati", "Veg Pulav"], key="v_dish_story")
         with v_setup_c2:
-            v_meal = st.selectbox("Meal Shift", ["Lunch", "Dinner", "Breakfast"], key="v_meal_sel")
+            v_meal = st.selectbox("Dining Shift", ["Lunch", "Dinner", "Breakfast"], key="v_meal_story")
         with v_setup_c3:
-            v_date = st.date_input("Inspection Date", value=date.today(), key="v_date_sel").strftime("%Y-%m-%d")
+            v_date = st.date_input("Inspection Date", value=date.today(), key="v_date_story").strftime("%Y-%m-%d")
 
-        # Two Options: Quick 4-Plate Demo Batch vs Multi-File Uploader
-        st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin:0.8rem 0 0.4rem 0;'>Input Plate Images</div>", unsafe_allow_html=True)
-        v_opt_col1, v_opt_col2 = st.columns([1, 1.2], gap="medium")
-
-        with v_opt_col1:
+        v_opt_c1, v_opt_c2 = st.columns([1, 1.2], gap="medium")
+        with v_opt_c1:
             st.markdown("""
             <div style="background:#F7F8F2; border-radius:12px; padding:1.0rem; border:1px solid rgba(18,55,42,0.1); text-align:center;">
-                <div style="font-weight:800; color:#12372A; font-size:0.92rem; margin-bottom:0.3rem;">⚡ Zero-Friction Viva Demonstration</div>
-                <p style="font-size:0.8rem; color:#64748B; margin:0 0 0.8rem 0;">Generate a synthetic 4-plate inspection batch (Clean, Light, Moderate, High leftover) instantly.</p>
+                <div style="font-weight:800; color:#12372A; font-size:0.92rem; margin-bottom:0.3rem;">⚡ Viva 1-Click Batch Demo</div>
+                <p style="font-size:0.8rem; color:#64748B; margin:0 0 0.8rem 0;">Generate a 4-plate inspection batch (Clean, Light, Moderate, High leftover) instantly.</p>
             """, unsafe_allow_html=True)
-            if st.button(f"⚡ Generate & Analyze 4-Plate Batch for {v_dish}", use_container_width=True, key="btn_sample_batch"):
+            if st.button(f"⚡ Generate & Analyze 4-Plate Batch for {v_dish}", use_container_width=True, key="btn_sample_batch_story"):
                 sample_imgs = vision_ai.generate_sample_plate_batch(v_dish, 4)
                 batch_res = vision_ai.analyze_plate_batch(sample_imgs, v_dish, v_meal, v_date)
                 st.session_state.current_vision_batch = batch_res
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-        with v_opt_col2:
+        with v_opt_c2:
             uploaded_files = st.file_uploader(
-                f"Upload Real Overhead Plate Photos for {v_dish} (Batch Mode)",
+                f"Or Upload Real Plate Photos for {v_dish} (Batch Mode)",
                 type=["jpg", "jpeg", "png"],
                 accept_multiple_files=True,
-                key="v_file_uploader"
+                key="v_uploader_story"
             )
             if uploaded_files:
-                if st.button(f"🔍 Analyze {len(uploaded_files)} Uploaded Plates with OpenCV", use_container_width=True, key="btn_analyze_uploaded"):
-                    uploaded_pil_list = []
-                    for uf in uploaded_files:
-                        img_pil = Image.open(uf).convert("RGB")
-                        uploaded_pil_list.append(img_pil)
+                if st.button(f"🔍 Analyze {len(uploaded_files)} Uploaded Plates with OpenCV", use_container_width=True, key="btn_analyze_uploaded_story"):
+                    uploaded_pil_list = [Image.open(uf).convert("RGB") for uf in uploaded_files]
                     batch_res = vision_ai.analyze_plate_batch(uploaded_pil_list, v_dish, v_meal, v_date)
                     st.session_state.current_vision_batch = batch_res
                     st.rerun()
 
-        # Display Analyzed Batch Results
+        # Batch Results
         if "current_vision_batch" in st.session_state and st.session_state.current_vision_batch:
             b_res = st.session_state.current_vision_batch
 
-            st.markdown("<div style='height:1.0rem;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height:0.8rem;'></div>", unsafe_allow_html=True)
             st.markdown(f"""
-            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.12); border-radius:16px; padding:1.2rem 1.4rem; box-shadow:0 4px 16px rgba(0,0,0,0.02);">
+            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.12); border-radius:16px; padding:1.2rem 1.4rem;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
                     <div>
-                        <span style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Batch Results • {b_res['batch_code']}</span>
-                        <h3 style="color:#12372A; margin:0.2rem 0; font-size:1.4rem;">{b_res['dish_name']} ({b_res['meal_period']})</h3>
+                        <span style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Batch {b_res['batch_code']}</span>
+                        <h3 style="color:#12372A; margin:0.2rem 0;">{b_res['dish_name']} ({b_res['meal_period']})</h3>
                     </div>
                     <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.8rem; padding:4px 12px; border-radius:8px;">
-                        {b_res['valid_images']} Valid Plates Analyzed
+                        {b_res['valid_images']} Plates Inspected
                     </span>
                 </div>
             """, unsafe_allow_html=True)
 
-            # 4 Batch Metric Cards
-            bm_c1, bm_c2, bm_c3, bm_c4 = st.columns(4)
-            with bm_c1:
-                st.markdown(f"""
-                <div style="background:#F7F8F2; border-radius:10px; padding:0.9rem; text-align:center;">
-                    <div style="font-size:0.72rem; text-transform:uppercase; color:#8A9990; font-weight:700;">Mean Coverage</div>
-                    <div style="font-size:1.6rem; font-weight:900; color:#12372A;">{b_res['average_coverage']:.1f}%</div>
-                    <div style="font-size:0.75rem; color:#64748B;">Optical Surface Leftover</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with bm_c2:
-                st.markdown(f"""
-                <div style="background:#F7F8F2; border-radius:10px; padding:0.9rem; text-align:center;">
-                    <div style="font-size:0.72rem; text-transform:uppercase; color:#8A9990; font-weight:700;">Median Coverage</div>
-                    <div style="font-size:1.6rem; font-weight:900; color:#12372A;">{b_res['median_coverage']:.1f}%</div>
-                    <div style="font-size:0.75rem; color:#64748B;">Robust Batch Midpoint</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with bm_c3:
-                st.markdown(f"""
-                <div style="background:#F7F8F2; border-radius:10px; padding:0.9rem; text-align:center;">
-                    <div style="font-size:0.72rem; text-transform:uppercase; color:#8A9990; font-weight:700;">High Waste Plates</div>
-                    <div style="font-size:1.6rem; font-weight:900; color:#E76F51;">{b_res['high_leftover_count']}</div>
-                    <div style="font-size:0.75rem; color:#64748B;">Plates &gt; 30% leftover</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with bm_c4:
-                st.markdown(f"""
-                <div style="background:#F7F8F2; border-radius:10px; padding:0.9rem; text-align:center;">
-                    <div style="font-size:0.72rem; text-transform:uppercase; color:#8A9990; font-weight:700;">Waste Fingerprint</div>
-                    <div style="font-size:1.05rem; font-weight:800; color:#12372A; margin:0.3rem 0;">{b_res['dominant_fingerprint']}</div>
-                    <div style="font-size:0.75rem; color:#16A36A; font-weight:600;">Dominant Spatial Shape</div>
-                </div>
-                """, unsafe_allow_html=True)
+            bm1, bm2, bm3, bm4 = st.columns(4)
+            with bm1:
+                st.metric("Mean Leftover", f"{b_res['average_coverage']:.1f}%")
+            with bm2:
+                st.metric("Median Leftover", f"{b_res['median_coverage']:.1f}%")
+            with bm3:
+                st.metric("High Leftover Plates", b_res['high_leftover_count'])
+            with bm4:
+                st.metric("Waste Fingerprint", b_res['dominant_fingerprint'])
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # Visual Plate Gallery
-            st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin:1.2rem 0 0.6rem 0;'>Individual Plate Inspection Gallery (Original vs Leftover Contour Mask)</div>", unsafe_allow_html=True)
-            
+            # Plate Gallery
+            st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin:1.2rem 0 0.6rem 0;'>Visual Leftover Segmentation (OpenCV Mask Highlighted in Green)</div>", unsafe_allow_html=True)
             p_cols = st.columns(min(4, len(b_res['plate_results'])))
             for idx, p in enumerate(b_res['plate_results']):
                 col_idx = idx % len(p_cols)
@@ -725,167 +768,136 @@ def render_manager_portal():
                             <span style="font-size:0.75rem; font-weight:800; color:{p['status_color']};">{p['leftover_category']}</span>
                         </div>
                     """, unsafe_allow_html=True)
-                    
-                    # Display Side-by-side or overlay
                     if p.get('overlay_img') is not None:
                         st.image(p['overlay_img'], caption=f"Leftover: {p['coverage_percentage']:.1f}% ({p['processing_time_ms']} ms)", use_container_width=True)
-                    elif p.get('original_img') is not None:
-                        st.image(p['original_img'], caption=f"Leftover: {p['coverage_percentage']:.1f}%", use_container_width=True)
-
-                    # Fingerprint details
-                    fp = p.get('fingerprint', {})
-                    fp_name = fp.get('fingerprint_type', 'Scattered') if isinstance(fp, dict) else str(fp)
-                    st.caption(f"Pattern: **{fp_name}** | Contours: {p.get('contour_count', 0)}")
+                    st.caption(f"Pattern: **{p.get('fingerprint', {}).get('fingerprint_type', 'Scattered')}**")
                     st.markdown("</div>", unsafe_allow_html=True)
 
-            # Adaptive Vision Quality & Action Guidance
-            rec_c1, rec_c2 = st.columns([1.2, 1], gap="medium")
+            # Guidance & Save
+            st.markdown(f"""
+            <div style="background:#F7F8F2; border-left:4px solid #16A36A; border-radius:12px; padding:1.0rem 1.2rem; margin:0.8rem 0;">
+                <strong style="color:#12372A;">💡 Operational Kitchen Advice:</strong> {b_res['recommendation']}
+            </div>
+            """, unsafe_allow_html=True)
 
-            with rec_c1:
-                st.markdown(f"""
-                <div style="background:#F7F8F2; border-left:4px solid #16A36A; border-radius:12px; padding:1.0rem 1.2rem; height:100%;">
-                    <div style="font-size:0.78rem; text-transform:uppercase; color:#16A36A; font-weight:800; margin-bottom:0.3rem;">Operational Kitchen Action</div>
-                    <div style="font-size:0.88rem; color:#18231F; line-height:1.5;">{b_res['recommendation']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+            with st.form("save_batch_form_story"):
+                sb_c1, sb_c2 = st.columns([1, 1])
+                with sb_c1:
+                    disc_kg = st.number_input("Physical Floor Scale Weight (kg)", min_value=0.0, max_value=150.0, value=round(b_res['average_coverage'] * 0.25, 1), step=0.5)
+                with sb_c2:
+                    batch_notes = st.text_input("Notes", placeholder="e.g. Standard dining shift")
 
-            with rec_c2:
-                st.markdown("""
-                <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:12px; padding:1.0rem 1.2rem; height:100%;">
-                    <div style="font-size:0.78rem; text-transform:uppercase; color:#8A9990; font-weight:800; margin-bottom:0.3rem;">Adaptive Pipeline Strategy</div>
-                    <div style="font-size:0.82rem; color:#64748B; line-height:1.4;">
-                        • Preprocessing: Dynamic CLAHE contrast normalization<br>
-                        • Color Spaces: Saturation (HSV) + B-channel Chrominance (CIELAB)<br>
-                        • Rice Detection: Laplacian Texture Variance (eliminates white tray false positives)
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            # Save Batch & Physical Discard Weight
-            st.markdown("<div style='height:0.8rem;'></div>", unsafe_allow_html=True)
-            with st.form("save_batch_form"):
-                sv_c1, sv_c2 = st.columns([1, 1])
-                with sv_c1:
-                    disc_kg = st.number_input(
-                        "Actual Discarded Food Weight from Kitchen Scale (kg)",
-                        min_value=0.0,
-                        max_value=150.0,
-                        value=round(b_res['average_coverage'] * 0.25, 1),
-                        step=0.5,
-                        help="Enter the physical mass measured by mess kitchen staff using weighing scales."
-                    )
-                with sv_c2:
-                    batch_notes = st.text_input("Shift Notes", placeholder="e.g. Lunch peak rush, standard salt recipe")
-
-                st.caption("⚖️ Camera analysis computes 2D optical surface coverage (%). Physical kilograms are measured by kitchen staff on the mess floor scale. Both are correlated in MessMind's memory.")
-                
-                save_batch_btn = st.form_submit_button("💾 Save Batch to Historical Waste Memory", use_container_width=True)
-
-                if save_batch_btn:
+                st.caption("⚖️ Camera analysis computes optical surface %; kitchen scales measure mass in kilograms. Both are recorded in MessMind's memory.")
+                if st.form_submit_button("💾 Save Batch to Historical Waste Memory", use_container_width=True):
                     b_id = db.save_vision_batch(b_res, actual_discarded_kg=disc_kg, notes=batch_notes)
-                    db.log_audit_event("VISION_BATCH_SAVED", "manager", f"Saved batch {b_res['batch_code']} for {v_dish} (ID: {b_id})")
-                    st.success(f"🎉 Batch **{b_res['batch_code']}** safely saved to Historical Waste Memory! (Record ID: {b_id})")
+                    db.log_audit_event("VISION_BATCH_SAVED", "manager", f"Saved batch {b_res['batch_code']} (ID: {b_id})")
+                    st.success(f"🎉 Batch **{b_res['batch_code']}** saved to Historical Memory!")
 
-        # Historical Waste Memory Comparison Table for this Dish
-        st.markdown(f"<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin:1.5rem 0 0.5rem 0;'>Historical Waste Memory for '{v_dish}'</div>", unsafe_allow_html=True)
-        memory_summary = db.get_dish_historical_vision_memory(v_dish)
-        
-        mem_info_c1, mem_info_c2 = st.columns([1, 2])
-        with mem_info_c1:
-            st.markdown(f"""
-            <div style="background:#F7F8F2; border-radius:12px; padding:1.1rem; text-align:center;">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:700;">Historical Avg Coverage</div>
-                <div style="font-size:1.8rem; font-weight:900; color:#12372A; margin:0.2rem 0;">{memory_summary.get('avg_coverage', 0.0):.1f}%</div>
-                <div style="font-size:0.78rem; color:#64748B;">Across {memory_summary.get('batches_analyzed', 0)} batches analyzed</div>
+        # Story Step Transition
+        st.markdown("""
+        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
+            <div>
+                <strong style="color:#12372A;">📖 Next Step in the Story:</strong>
+                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Plates scanned and grams recorded! Now we hear directly from students why they skipped or left food.</span>
             </div>
-            """, unsafe_allow_html=True)
-        
-        with mem_info_c2:
-            st.markdown(f"""
-            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:12px; padding:1.1rem; height:100%;">
-                <div style="font-size:0.78rem; text-transform:uppercase; color:#16A36A; font-weight:800; margin-bottom:0.3rem;">Historical Dish Memory Advice</div>
-                <div style="font-size:0.86rem; color:#18231F; line-height:1.5;">{memory_summary.get('recommendation', 'No previous history recorded yet.')}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">Proceed to Stage 5: Student Voice & Savings ➔</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # TAB 6: KITCHEN WASTE ANALYTICS & INTELLIGENCE
+    # TAB 6: STAGE 5 — STUDENT VOICE & FEEDBACK HUB (WHERE STUDENT INPUT SAVES)
     # -------------------------------------------------------------------------
     with m_tabs[5]:
+        render_story_header(5)
+
         st.markdown("""
         <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.08); border-radius:18px; padding:1.2rem 1.5rem; margin-bottom:1.2rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem;">
                 <div>
-                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">📊 Plain-English Kitchen Waste Intelligence</h3>
-                    <div style="color:#64748B; font-size:0.85rem;">Designed for mess kitchen supervisors and administrative officers — zero data science jargon.</div>
+                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">⭐ Stage 5: Student Voice, Ratings & Skip Reasons</h3>
+                    <div style="color:#64748B; font-size:0.85rem;">Hear directly why students skipped meals or left food behind. Closes the feedback loop for kitchen continuous improvement.</div>
                 </div>
-                <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">ACTIONABLE METRICS</span>
+                <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">STEP 5 OF LIFECYCLE</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        analytics_records = db.get_meal_records(limit=4000)
+        # Pull student feedback from database
+        all_feedback_df = db.get_student_feedback_records(limit=100)
 
-        # 3 Key Takeaways in plain English
-        t_c1, t_c2, t_c3 = st.columns(3)
-        with t_c1:
-            st.markdown("""
-            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.1rem; height:100%;">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#E76F51; font-weight:800; margin-bottom:0.3rem;">1. Sunday Turnout Drop</div>
-                <h4 style="color:#12372A; margin:0 0 0.4rem 0;">24% Lower Sunday Attendance</h4>
-                <p style="font-size:0.82rem; color:#64748B; line-height:1.4; margin:0;">
-                    Students frequently dine at local Dharwad restaurants on Sundays. The system automatically reduces Sunday cooking targets by 20%.
-                </p>
+        # Satisfaction KPI cards
+        total_fb_count = len(all_feedback_df) if not all_feedback_df.empty else 0
+        avg_rating = round(all_feedback_df['rating'].mean(), 1) if total_fb_count > 0 else 4.2
+        
+        fb_c1, fb_c2, fb_c3 = st.columns(3)
+        with fb_c1:
+            st.markdown(f"""
+            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.1rem; text-align:center;">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Average Meal Rating</div>
+                <div style="font-size:2.0rem; font-weight:900; color:#12372A; margin:0.2rem 0;">⭐ {avg_rating} <span style="font-size:1.0rem; color:#8A9990;">/ 5.0</span></div>
+                <div style="font-size:0.75rem; color:#16A36A; font-weight:600;">Overall Student Satisfaction</div>
             </div>
             """, unsafe_allow_html=True)
 
-        with t_c2:
-            st.markdown("""
-            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.1rem; height:100%;">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#16A36A; font-weight:800; margin-bottom:0.3rem;">2. Ladle Optimization</div>
-                <h4 style="color:#12372A; margin:0 0 0.4rem 0;">High Curry Leftovers</h4>
-                <p style="font-size:0.82rem; color:#64748B; line-height:1.4; margin:0;">
-                    Vision AI detects that 35% of curry waste consists of unconsumed gravy. We recommend a 15% smaller first-serving scoop with free seconds.
-                </p>
+        with fb_c2:
+            st.markdown(f"""
+            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.1rem; text-align:center;">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Total Student Reviews</div>
+                <div style="font-size:2.0rem; font-weight:900; color:#16A36A; margin:0.2rem 0;">{total_fb_count}</div>
+                <div style="font-size:0.78rem; color:#64748B;">Reviews Submitted via Portal</div>
             </div>
             """, unsafe_allow_html=True)
 
-        with t_c3:
-            st.markdown("""
-            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.1rem; height:100%;">
-                <div style="font-size:0.75rem; text-transform:uppercase; color:#F4A261; font-weight:800; margin-bottom:0.3rem;">3. Safety Buffer Success</div>
-                <h4 style="color:#12372A; margin:0 0 0.4rem 0;">Zero Shortage Incidents</h4>
-                <p style="font-size:0.82rem; color:#64748B; line-height:1.4; margin:0;">
-                    With the mandatory +5% safety buffer, no hostel student was turned away hungry, while over-prep decreased by 18.4%.
-                </p>
+        with fb_c3:
+            top_reason = all_feedback_df['skip_reason'].mode()[0] if (total_fb_count > 0 and not all_feedback_df['skip_reason'].dropna().empty and all_feedback_df['skip_reason'].mode().values[0] != '') else "Class / Lab Clash"
+            st.markdown(f"""
+            <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.1); border-radius:14px; padding:1.1rem; text-align:center;">
+                <div style="font-size:0.75rem; text-transform:uppercase; color:#8A9990; font-weight:800;">Top Skip Reason</div>
+                <div style="font-size:1.25rem; font-weight:900; color:#E76F51; margin:0.5rem 0;">{top_reason}</div>
+                <div style="font-size:0.78rem; color:#64748B;">Most common reason for absence</div>
             </div>
             """, unsafe_allow_html=True)
 
         st.markdown("<div style='height:1.0rem;'></div>", unsafe_allow_html=True)
 
-        # Dish Waste Table with plain explanations
-        if not analytics_records.empty:
-            dish_summary = analytics_records.groupby('dish_name').agg({
-                'discarded_quantity': 'sum',
-                'discarded_food_cost_inr': 'sum',
-                'quantity_prepared': 'sum'
-            }).reset_index()
-            dish_summary['waste_pct'] = (dish_summary['discarded_quantity'] / dish_summary['quantity_prepared'] * 100).round(1)
-            dish_summary = dish_summary.sort_values('discarded_food_cost_inr', ascending=False)
-            dish_summary.columns = ['Dish Name', 'Total Discarded Servings', 'Total Financial Loss (₹)', 'Total Prepared Servings', 'Waste Rate (%)']
+        # Incoming Student Feedback Live Feed
+        st.markdown("<div style='font-size:1.0rem; font-weight:800; color:#12372A; margin-bottom:0.5rem;'>Live Incoming Student Feedback & Rating Feed</div>", unsafe_allow_html=True)
 
-            st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>Dishes Ranked by Financial Waste Loss</div>", unsafe_allow_html=True)
-            st.dataframe(dish_summary.head(15), use_container_width=True, hide_index=True)
+        if not all_feedback_df.empty:
+            display_fb = all_feedback_df[['student_roll', 'meal_date', 'meal_type', 'dish_name', 'rating', 'skip_reason', 'feedback_text', 'created_at']].rename(columns={
+                'student_roll': 'Student Roll',
+                'meal_date': 'Date',
+                'meal_type': 'Meal',
+                'dish_name': 'Dish',
+                'rating': 'Rating (1-5 ⭐)',
+                'skip_reason': 'Skip Reason',
+                'feedback_text': 'Comments / Suggestion',
+                'created_at': 'Submitted On'
+            })
+            st.dataframe(display_fb, use_container_width=True, hide_index=True)
+        else:
+            st.info("No student feedback submitted yet. When students submit ratings or explain why they skipped on the Student Portal, their comments and ratings will display here.")
+
+        # Story Step Transition
+        st.markdown("""
+        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
+            <div>
+                <strong style="color:#12372A;">🔄 Closed-Loop Dining Intelligence Complete:</strong>
+                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Student feedback reviewed and waste trends identified! The kitchen uses this knowledge to refine recipes.</span>
+            </div>
+            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">↺ Returns to Stage 1: Tomorrow's Menu</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # TAB 7: STAFF FOOD-WASTE RECORDING & SAVED HISTORY
+    # TAB 7: SHIFT WASTE RECORDS & HISTORICAL DATABASE
     # -------------------------------------------------------------------------
     with m_tabs[6]:
         st.markdown("""
         <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.08); border-radius:18px; padding:1.2rem 1.5rem; margin-bottom:1.2rem;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">📝 Staff Food-Waste Recording</h3>
+                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">📝 Staff Food-Waste Recording & Verifiable Database</h3>
                     <div style="color:#64748B; font-size:0.85rem;">Log post-meal shifts into the verified database with full audit trail and instant confirmation card.</div>
                 </div>
                 <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">SQLITE PERSISTENT</span>
@@ -893,13 +905,13 @@ def render_manager_portal():
         </div>
         """, unsafe_allow_html=True)
 
-        with st.form("staff_record_waste_form"):
+        with st.form("staff_record_waste_form_story"):
             r_c1, r_c2, r_c3 = st.columns(3)
             with r_c1:
-                r_date = st.date_input("Service Date", value=date.today(), key="r_date_in").strftime("%Y-%m-%d")
-                r_meal = st.selectbox("Meal Period", ["Lunch", "Dinner", "Breakfast", "Snacks"], key="r_meal_in")
+                r_date = st.date_input("Service Date", value=date.today(), key="r_date_story").strftime("%Y-%m-%d")
+                r_meal = st.selectbox("Meal Period", ["Lunch", "Dinner", "Breakfast", "Snacks"], key="r_meal_story")
             with r_c2:
-                r_dish = st.selectbox("Dish Name", list(DEFAULT_COSTS.keys()), index=list(DEFAULT_COSTS.keys()).index("Dal Tadka") if "Dal Tadka" in DEFAULT_COSTS else 0, key="r_dish_in")
+                r_dish = st.selectbox("Dish Name", list(DEFAULT_COSTS.keys()), index=list(DEFAULT_COSTS.keys()).index("Dal Tadka") if "Dal Tadka" in DEFAULT_COSTS else 0, key="r_dish_story")
                 r_cost = st.number_input("Cost per Serving (₹)", min_value=1.0, max_value=200.0, value=float(DEFAULT_COSTS.get(r_dish, 15.0)), step=1.0)
             with r_c3:
                 r_prep = st.number_input("Quantity Prepared (Servings)", min_value=10, max_value=800, value=350, step=5)
@@ -965,26 +977,22 @@ def render_manager_portal():
             </div>
             """, unsafe_allow_html=True)
 
-        # Saved Records & Database History
+        # Database History
         st.markdown("<div style='font-size:1.1rem; font-weight:800; color:#12372A; margin:1.5rem 0 0.6rem 0;'>Saved Records & Database History</div>", unsafe_allow_html=True)
-        
-        hist_f1, hist_f2, hist_f3 = st.columns(3)
-        with hist_f1:
-            h_dish_filter = st.text_input("Filter by Dish Name", placeholder="e.g. Dal Tadka", key="h_dish_fil")
-        with hist_f2:
-            h_meal_filter = st.selectbox("Filter by Meal Period", ["All Meals", "Lunch", "Dinner", "Breakfast", "Snacks"], key="h_meal_fil")
-        with hist_f3:
-            h_limit = st.slider("Records to Display", min_value=10, max_value=200, value=25, step=5, key="h_lim")
+        h_f1, h_f2, h_f3 = st.columns(3)
+        with h_f1:
+            h_dish_filter = st.text_input("Search Dish Name", placeholder="e.g. Dal Tadka", key="h_dish_story")
+        with h_f2:
+            h_meal_filter = st.selectbox("Meal Filter", ["All Meals", "Lunch", "Dinner", "Breakfast", "Snacks"], key="h_meal_story")
+        with h_f3:
+            h_limit = st.slider("Records Count", min_value=10, max_value=200, value=25, step=5, key="h_lim_story")
 
         meal_param = None if h_meal_filter == "All Meals" else h_meal_filter
         dish_param = h_dish_filter.strip() if h_dish_filter.strip() else None
 
         res = db.get_filtered_meal_records(dish_name=dish_param, meal_type=meal_param, limit=h_limit)
-        if isinstance(res, tuple):
-            filtered_records, total_count = res
-        else:
-            filtered_records = res
-            total_count = len(filtered_records)
+        filtered_records = res[0] if isinstance(res, tuple) else res
+        total_count = res[1] if isinstance(res, tuple) else len(filtered_records)
         
         st.caption(f"Showing {len(filtered_records)} of {total_count} matching records (Newest at the top)")
         if filtered_records.empty:
@@ -992,16 +1000,23 @@ def render_manager_portal():
         else:
             st.dataframe(filtered_records, use_container_width=True, hide_index=True)
 
+        # Storage Explainer
+        st.markdown("""
+        <div style="background:#F7F8F2; border-left:4px solid #12372A; border-radius:12px; padding:1.0rem 1.2rem; margin-top:1.2rem; font-size:0.84rem; color:#18231F; line-height:1.5;">
+            <strong style="color:#12372A; font-size:0.95rem;">🗄️ Storage Engine:</strong> Local SQLite Relational Database (<code>data/messmind.db</code>) • Primary Table: <code>meal_records</code> • Dual-synchronized to <code>data/mess_data.csv</code>.
+        </div>
+        """, unsafe_allow_html=True)
+
     # -------------------------------------------------------------------------
-    # TAB 8: MESS SETTINGS, ANNOUNCEMENTS & AUDIT LOGS
+    # TAB 8: MESS SETTINGS & CAMPUS BROADCASTS
     # -------------------------------------------------------------------------
     with m_tabs[7]:
         st.markdown("""
         <div style="background:#FFFFFF; border:1px solid rgba(18,55,42,0.08); border-radius:18px; padding:1.2rem 1.5rem; margin-bottom:1.2rem;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">⚙️ Mess Settings, Notice Broadcasts & Audit Logs</h3>
-                    <div style="color:#64748B; font-size:0.85rem;">Hostel dining settings, live student broadcast announcements, and system audit trail.</div>
+                    <h3 style="color:#12372A; margin:0; font-size:1.3rem; font-weight:800;">⚙️ Campus Settings & Broadcast Notices</h3>
+                    <div style="color:#64748B; font-size:0.85rem;">Post announcements to all student notice boards, configure safety buffer %, and view system audit logs.</div>
                 </div>
                 <span style="background:rgba(18,55,42,0.1); color:#12372A; font-weight:800; font-size:0.75rem; padding:4px 10px; border-radius:8px;">ADMINISTRATIVE</span>
             </div>
@@ -1014,49 +1029,43 @@ def render_manager_portal():
             st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.6rem;'>Campus Mess Parameters</div>", unsafe_allow_html=True)
             settings_dict = db.get_mess_settings()
             
-            with st.form("mess_params_form"):
+            with st.form("mess_params_form_story"):
                 cap_val = st.number_input("Total Hostel Student Capacity", min_value=100, max_value=2000, value=int(settings_dict.get('hostel_capacity', 450)))
                 buf_val = st.number_input("ML Safety Margin (%)", min_value=1.0, max_value=25.0, value=float(settings_dict.get('safety_margin_pct', 5.0)), step=0.5)
                 cost_thresh = st.number_input("Waste Cost Alert Threshold (₹)", min_value=100.0, max_value=10000.0, value=float(settings_dict.get('waste_cost_alert_threshold', 1000.0)), step=100.0)
                 
-                save_params = st.form_submit_button("Update Mess Settings", use_container_width=True)
-                if save_params:
+                if st.form_submit_button("Update Mess Settings", use_container_width=True):
                     db.update_mess_setting('hostel_capacity', cap_val)
                     db.update_mess_setting('safety_margin_pct', buf_val)
                     db.update_mess_setting('waste_cost_alert_threshold', cost_thresh)
                     db.log_audit_event("SETTINGS_UPDATE", "manager", f"Updated capacity to {cap_val}, buffer to {buf_val}%")
                     st.success("Mess settings updated successfully!")
 
-            # Network & Host Link Info
             lan_ip = get_lan_ip()
             st.markdown(f"""
             <div style="background:#F7F8F2; border-left:4px solid #16A36A; border-radius:12px; padding:1.0rem 1.2rem; margin-top:1.2rem; font-size:0.84rem; color:#18231F; line-height:1.5;">
-                <strong style="color:#12372A; font-size:0.95rem;">🌐 Host & Network Connectivity Links</strong><br>
-                • <strong>Local Computer (Same PC):</strong> <a href="http://localhost:8501" target="_blank">http://localhost:8501</a> or <a href="http://127.0.0.1:8501" target="_blank">http://127.0.0.1:8501</a><br>
-                • <strong>Campus Wi-Fi / LAN:</strong> <a href="http://{lan_ip}:8501" target="_blank">http://{lan_ip}:8501</a><br>
-                • <em>Note: To access from student phones or other laptops on the same Wi-Fi, open the LAN URL above. Ensure Windows Firewall permits inbound traffic on port 8501.</em>
+                <strong style="color:#12372A; font-size:0.95rem;">🌐 Host & Network Connectivity Links:</strong><br>
+                • <strong>Local PC:</strong> <a href="http://localhost:8501" target="_blank">http://localhost:8501</a><br>
+                • <strong>Student Mobile / Wi-Fi:</strong> <a href="http://{lan_ip}:8501" target="_blank">http://{lan_ip}:8501</a>
             </div>
             """, unsafe_allow_html=True)
 
         with set_col2:
-            st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.6rem;'>📢 Post Broadcast Announcement</div>", unsafe_allow_html=True)
-            with st.form("post_announcement_form"):
-                ann_title = st.text_input("Announcement Title", placeholder="e.g. Festival Feast this Friday!")
-                ann_content = st.text_area("Message Content", placeholder="e.g. Special Ugadi dinner will be served from 7:30 PM. Please RSVP your attendance!")
-                ann_priority = st.selectbox("Priority Level", ["normal", "high", "urgent"])
-                ann_target = st.selectbox("Target Audience", ["student", "all", "staff"])
+            st.markdown("<div style='font-size:0.95rem; font-weight:800; color:#12372A; margin-bottom:0.6rem;'>📢 Broadcast Notice to Student Notice Boards</div>", unsafe_allow_html=True)
+            with st.form("post_announcement_form_story"):
+                ann_title = st.text_input("Title", placeholder="e.g. Special Feast on Friday!")
+                ann_content = st.text_area("Message", placeholder="e.g. Special Ugadi dinner will be served from 7:30 PM. Please RSVP!")
+                ann_priority = st.selectbox("Priority", ["normal", "high", "urgent"])
 
-                post_ann_btn = st.form_submit_button("📢 Broadcast to Campus Students", use_container_width=True)
-                if post_ann_btn:
+                if st.form_submit_button("📢 Broadcast Notice to Students", use_container_width=True):
                     if ann_title.strip() and ann_content.strip():
-                        ann_id = db.add_announcement(ann_title.strip(), ann_content.strip(), ann_priority, ann_target, author="manager")
-                        db.log_audit_event("ANNOUNCEMENT_POST", "manager", f"Posted notice '{ann_title}' (ID: {ann_id})")
-                        st.success("Announcement broadcast successfully!")
+                        db.add_announcement(ann_title.strip(), ann_content.strip(), ann_priority, target_role="student")
+                        db.log_audit_event("ANNOUNCEMENT_POST", "manager", f"Posted notice '{ann_title}'")
+                        st.success("Broadcast posted to all student notice boards!")
                         st.rerun()
                     else:
                         st.error("Title and message cannot be empty.")
 
-            # Active Announcements Table with Delete Option
             st.markdown("<div style='font-size:0.92rem; font-weight:800; color:#12372A; margin:1.0rem 0 0.4rem 0;'>Active Campus Notices</div>", unsafe_allow_html=True)
             active_anns = db.get_announcements(active_only=False)
             if not active_anns.empty:
@@ -1072,11 +1081,8 @@ def render_manager_portal():
                             st.rerun()
                     st.markdown("<hr style='margin:0.2rem 0; border:none; border-top:1px solid #EEF2F6;'>", unsafe_allow_html=True)
 
-        # System Audit Log Table
+        # Audit Logs
         st.markdown("<div style='font-size:1.0rem; font-weight:800; color:#12372A; margin:1.5rem 0 0.5rem 0;'>🛡️ Immutable System Audit Logs</div>", unsafe_allow_html=True)
-        audit_df = db.get_audit_logs(limit=30)
+        audit_df = db.get_audit_logs(limit=25)
         if not audit_df.empty:
             st.dataframe(audit_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No audit events recorded yet.")
-

@@ -138,3 +138,4 @@ def render_login_page():
             • <strong>Security:</strong> PBKDF2-HMAC-SHA256 password hashing with unique 16-byte random salt per user. Session state role isolation prevents URL escalation.
         </div>
         """, unsafe_allow_html=True)
+

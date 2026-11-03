@@ -386,38 +386,60 @@ def get_attendance_intent_counts(
     try:
         cursor = conn.cursor()
 
-        # Query all registrations for this date and meal
+        # Check student_meal_intents table first (live student votes)
         cursor.execute("""
-            SELECT attendance_intent, intention_to_attend FROM student_registrations
+            SELECT intent_status FROM student_meal_intents
             WHERE meal_date = ? AND meal_type = ?
         """, (meal_date, meal_type))
-        rows = cursor.fetchall()
+        live_rows = cursor.fetchall()
 
         yes_count = 0
         no_count = 0
         not_sure_count = 0
 
-        for r in rows:
-            intent = r["attendance_intent"]
-            if intent == "Yes":
-                yes_count += 1
-            elif intent == "No":
-                no_count += 1
-            elif intent == "Not sure":
-                not_sure_count += 1
-            else:
-                # Fallback for historical rows without attendance_intent column
-                if r["intention_to_attend"] == 1:
+        if live_rows:
+            for r in live_rows:
+                st = r["intent_status"]
+                if st == "Attending":
                     yes_count += 1
-                else:
+                elif st == "Not Attending":
                     no_count += 1
+                elif st == "Not sure":
+                    not_sure_count += 1
+            total_responses = len(live_rows)
+        else:
+            # Fallback to student_registrations table
+            cursor.execute("""
+                SELECT attendance_intent, intention_to_attend FROM student_registrations
+                WHERE meal_date = ? AND meal_type = ?
+            """, (meal_date, meal_type))
+            rows = cursor.fetchall()
+            for r in rows:
+                intent = r["attendance_intent"]
+                if intent == "Yes":
+                    yes_count += 1
+                elif intent == "No":
+                    no_count += 1
+                elif intent == "Not sure":
+                    not_sure_count += 1
+                else:
+                    if r["intention_to_attend"] == 1:
+                        yes_count += 1
+                    else:
+                        no_count += 1
+            total_responses = len(rows)
 
-        total_responses = len(rows)
         unresponsive_count = max(0, eligible_students - total_responses)
 
         return {
             "yes_count": yes_count,
             "no_count": no_count,
+            "not_sure_count": not_sure_count,
+            "Attending": yes_count,
+            "Not Attending": no_count,
+            "Not sure": not_sure_count,
+            "attending_count": yes_count,
+            "not_attending_count": no_count,
             "not_sure_count": not_sure_count,
             "total_responses": total_responses,
             "eligible_students": eligible_students,
@@ -1627,6 +1649,9 @@ def get_aggregated_intent_counts_for_date(
 
         total = sum(counts.values())
         return {
+            "Attending": counts["Attending"],
+            "Not Attending": counts["Not Attending"],
+            "Not sure": counts["Not sure"],
             "attending_count": counts["Attending"],
             "not_attending_count": counts["Not Attending"],
             "not_sure_count": counts["Not sure"],
