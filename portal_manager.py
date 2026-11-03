@@ -272,50 +272,6 @@ def render_manager_portal():
                 )
                 st.plotly_chart(fig_pie, use_container_width=True)
 
-        # Real-time Synchronized Student Activity Hub
-        st.markdown("<hr style='margin:1.4rem 0 1.0rem 0; border:none; border-top:1px solid rgba(18,55,42,0.08);'>", unsafe_allow_html=True)
-        st.markdown("""
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
-            <div>
-                <span style="font-size:1.1rem; font-weight:800; color:#12372A;">⚡ Live Student Portal Activity (Direct Database Synchronization)</span>
-                <div style="font-size:0.82rem; color:#64748B;">Incoming votes and feedback submitted by students appear here in real time.</div>
-            </div>
-            <span style="background:rgba(22,163,106,0.12); color:#16A36A; font-size:0.75rem; font-weight:800; padding:4px 10px; border-radius:8px;">● LIVE SYNC ACTIVE</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        live_c1, live_c2 = st.columns(2, gap="medium")
-        with live_c1:
-            st.markdown("<div style='font-size:0.92rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>🗳️ Recent Student RSVPs</div>", unsafe_allow_html=True)
-            recent_intents = db.get_student_meal_intents()
-            if recent_intents is not None and not recent_intents.empty:
-                display_ri = recent_intents.head(5)[['student_roll', 'meal_date', 'meal_type', 'intent_status', 'updated_at']].rename(columns={
-                    'student_roll': 'Roll No',
-                    'meal_date': 'Date',
-                    'meal_type': 'Meal',
-                    'intent_status': 'Vote',
-                    'updated_at': 'Time'
-                })
-                st.dataframe(display_ri, use_container_width=True, hide_index=True)
-            else:
-                st.info("No student RSVPs received yet.")
-
-        with live_c2:
-            st.markdown("<div style='font-size:0.92rem; font-weight:800; color:#12372A; margin-bottom:0.4rem;'>⭐ Recent Student Reviews</div>", unsafe_allow_html=True)
-            recent_fb = db.get_student_feedback_records(limit=5)
-            if recent_fb is not None and not recent_fb.empty:
-                display_rf = recent_fb[['student_roll', 'meal_date', 'meal_type', 'rating', 'feedback_text', 'created_at']].rename(columns={
-                    'student_roll': 'Roll No',
-                    'meal_date': 'Date',
-                    'meal_type': 'Meal',
-                    'rating': 'Rating',
-                    'feedback_text': 'Comments',
-                    'created_at': 'Time'
-                })
-                st.dataframe(display_rf, use_container_width=True, hide_index=True)
-            else:
-                st.info("No student reviews received yet.")
-
     # -------------------------------------------------------------------------
     # TAB 2: STAGE 1 — DAILY MENU ROSTER (MANAGER CRUD & PUBLISH)
     # -------------------------------------------------------------------------
@@ -433,17 +389,6 @@ def render_manager_portal():
                             st.rerun()
                 st.markdown("<hr style='margin:0.4rem 0; border:none; border-top:1px solid #EEF2F6;'>", unsafe_allow_html=True)
 
-        # Story Step Transition
-        st.markdown("""
-        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
-            <div>
-                <strong style="color:#12372A;">📖 Next Step in the Story:</strong>
-                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Now that today's menu is published, students open their portal and declare if they are eating.</span>
-            </div>
-            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">Proceed to Stage 2: Student RSVPs ➔</span>
-        </div>
-        """, unsafe_allow_html=True)
-
     # -------------------------------------------------------------------------
     # TAB 3: STAGE 2 — LIVE STUDENT TURNOUT & RSVPS (STUDENT INPUT HUB)
     # -------------------------------------------------------------------------
@@ -539,17 +484,6 @@ def render_manager_portal():
             st.dataframe(display_intents, use_container_width=True, hide_index=True)
         else:
             st.info(f"No student votes recorded yet for {sel_rsvp_date}. When students select their meal plan on the Student Portal, their names and responses appear here immediately.")
-
-        # Story Step Transition
-        st.markdown("""
-        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
-            <div>
-                <strong style="color:#12372A;">📖 Next Step in the Story:</strong>
-                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Student turnout is locked! Head cooks now take these confirmed numbers into our Smart Prep model.</span>
-            </div>
-            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">Proceed to Stage 3: Smart Prep Target ➔</span>
-        </div>
-        """, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
     # TAB 4: STAGE 3 — SMART PREP TARGET (AI + 5% SAFETY BUFFER)
@@ -660,17 +594,6 @@ def render_manager_portal():
                 )
                 st.success(f"🎉 Kitchen Work Order Signed! **{approved_servings} servings** of **{p_dish}** approved for cooking.")
 
-        # Story Step Transition
-        st.markdown("""
-        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
-            <div>
-                <strong style="color:#12372A;">📖 Next Step in the Story:</strong>
-                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Food was cooked and served! Now students return their used trays. The OpenCV camera scans plate waste.</span>
-            </div>
-            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">Proceed to Stage 4: Plate Inspection ➔</span>
-        </div>
-        """, unsafe_allow_html=True)
-
     # -------------------------------------------------------------------------
     # TAB 5: STAGE 4 — PLATE INSPECTION (OPENCV VISION AI)
     # -------------------------------------------------------------------------
@@ -720,7 +643,7 @@ def render_manager_portal():
             )
             if uploaded_files:
                 if st.button(f"🔍 Analyze {len(uploaded_files)} Uploaded Plates with OpenCV", use_container_width=True, key="btn_analyze_uploaded_story"):
-                    uploaded_pil_list = [Image.open(uf).convert("RGB") for uf in uploaded_files]
+                    uploaded_pil_list = [(uf.name, Image.open(uf).convert("RGB")) for uf in uploaded_files]
                     batch_res = vision_ai.analyze_plate_batch(uploaded_pil_list, v_dish, v_meal, v_date)
                     st.session_state.current_vision_batch = batch_res
                     st.rerun()
@@ -792,17 +715,6 @@ def render_manager_portal():
                     b_id = db.save_vision_batch(b_res, actual_discarded_kg=disc_kg, notes=batch_notes)
                     db.log_audit_event("VISION_BATCH_SAVED", "manager", f"Saved batch {b_res['batch_code']} (ID: {b_id})")
                     st.success(f"🎉 Batch **{b_res['batch_code']}** saved to Historical Memory!")
-
-        # Story Step Transition
-        st.markdown("""
-        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
-            <div>
-                <strong style="color:#12372A;">📖 Next Step in the Story:</strong>
-                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Plates scanned and grams recorded! Now we hear directly from students why they skipped or left food.</span>
-            </div>
-            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">Proceed to Stage 5: Student Voice & Savings ➔</span>
-        </div>
-        """, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
     # TAB 6: STAGE 5 — STUDENT VOICE & FEEDBACK HUB (WHERE STUDENT INPUT SAVES)
@@ -877,17 +789,6 @@ def render_manager_portal():
             st.dataframe(display_fb, use_container_width=True, hide_index=True)
         else:
             st.info("No student feedback submitted yet. When students submit ratings or explain why they skipped on the Student Portal, their comments and ratings will display here.")
-
-        # Story Step Transition
-        st.markdown("""
-        <div style="background:#F7F8F2; border-radius:12px; padding:0.9rem 1.2rem; margin-top:1.2rem; display:flex; justify-content:space-between; align-items:center; border:1px solid rgba(18,55,42,0.08);">
-            <div>
-                <strong style="color:#12372A;">🔄 Closed-Loop Dining Intelligence Complete:</strong>
-                <span style="color:#64748B; font-size:0.86rem; margin-left:6px;">Student feedback reviewed and waste trends identified! The kitchen uses this knowledge to refine recipes.</span>
-            </div>
-            <span style="color:#16A36A; font-weight:800; font-size:0.85rem;">↺ Returns to Stage 1: Tomorrow's Menu</span>
-        </div>
-        """, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
     # TAB 7: SHIFT WASTE RECORDS & HISTORICAL DATABASE

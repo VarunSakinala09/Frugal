@@ -525,7 +525,15 @@ def analyze_food_image_adaptive(image_input, custom_params: Optional[Dict[str, A
     start_time = time.perf_counter()
 
     # Convert to BGR
-    if isinstance(image_input, bytes):
+    if hasattr(image_input, "getvalue"):
+        raw_bytes = image_input.getvalue()
+        nparr = np.frombuffer(raw_bytes, np.uint8)
+        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    elif hasattr(image_input, "read") and not isinstance(image_input, (np.ndarray, Image.Image)):
+        raw_bytes = image_input.read()
+        nparr = np.frombuffer(raw_bytes, np.uint8)
+        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    elif isinstance(image_input, bytes):
         nparr = np.frombuffer(image_input, np.uint8)
         img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     elif isinstance(image_input, Image.Image):
@@ -693,7 +701,13 @@ def analyze_plate_batch(
     coverages = []
     fingerprint_counts = {}
 
-    for p_id, p_input in images_list:
+    for idx, item in enumerate(images_list):
+        if isinstance(item, (tuple, list)) and len(item) == 2:
+            p_id, p_input = item
+        else:
+            p_id = getattr(item, 'name', f"Plate-{idx+1}")
+            p_input = item
+
         try:
             res = analyze_food_image_adaptive(p_input)
             if res.get("success"):
