@@ -13,7 +13,8 @@ Provides robust, real-time computer vision analysis:
 """
 
 import time
-from typing import Dict, Any, Tuple
+from datetime import datetime
+from typing import Dict, Any, Tuple, Optional, List
 import cv2
 import numpy as np
 from PIL import Image
@@ -348,13 +349,440 @@ def analyze_food_image(image_input) -> Dict[str, Any]:
     }
 
 
+# =============================================================================
+# ADAPTIVE COMPUTER VISION INTELLIGENCE & FOOD WASTE FINGERPRINTING
+# =============================================================================
+
+def analyze_image_quality(img_bgr: np.ndarray) -> Dict[str, Any]:
+    """
+    Evaluate optical characteristics of the input plate photograph:
+    brightness, contrast, noise estimate, and focus/sharpness.
+    """
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    mean_brightness = float(np.mean(gray))
+    contrast_std = float(np.std(gray))
+    
+    # Sharpness via Laplacian variance
+    lap = cv2.Laplacian(gray, cv2.CV_64F)
+    sharpness = float(lap.var())
+    
+    # Noise level estimate via difference between image and median-filtered image
+    median = cv2.medianBlur(gray, 3)
+    noise_est = float(np.mean(np.abs(gray.astype(np.float32) - median.astype(np.float32))))
+
+    # Determine optical quality state
+    if sharpness < 25.0:
+        quality_label = "Blurry / Low Sharpness"
+        quality_score = 0.55
+    elif mean_brightness < 70.0:
+        quality_label = "Under-Exposed / Dim Lighting"
+        quality_score = 0.70
+    elif mean_brightness > 210.0:
+        quality_label = "Over-Exposed / High Glare"
+        quality_score = 0.75
+    elif contrast_std < 32.0:
+        quality_label = "Flat Contrast"
+        quality_score = 0.80
+    else:
+        quality_label = "Optimal Exposure & Focus"
+        quality_score = 0.98
+
+    return {
+        "mean_brightness": round(mean_brightness, 1),
+        "contrast_std": round(contrast_std, 1),
+        "sharpness": round(sharpness, 1),
+        "noise_estimate": round(noise_est, 2),
+        "quality_label": quality_label,
+        "quality_score": quality_score
+    }
+
+
+def select_adaptive_strategy(quality_info: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Dynamically select computer vision preprocessing parameters based on image quality characteristics.
+    """
+    b = quality_info["mean_brightness"]
+    c = quality_info["contrast_std"]
+    noise = quality_info["noise_estimate"]
+
+    apply_clahe = False
+    bilateral_d = 0
+    sat_thresh_adj = 0
+
+    if c < 35.0:
+        strategy_name = "Adaptive Contrast Boost (CLAHE)"
+        apply_clahe = True
+    elif b < 85.0:
+        strategy_name = "Adaptive Dim Compensation (-8 Sat Thresh)"
+        sat_thresh_adj = -8
+    elif b > 200.0:
+        strategy_name = "Adaptive Glare Suppression (+6 Sat Thresh)"
+        sat_thresh_adj = 6
+    elif noise > 4.5:
+        strategy_name = "Adaptive Bilateral Denoising"
+        bilateral_d = 7
+    else:
+        strategy_name = "Standard Dual-Space HSV+CIELAB"
+
+    return {
+        "strategy_name": strategy_name,
+        "apply_clahe": apply_clahe,
+        "bilateral_d": bilateral_d,
+        "sat_thresh_adj": sat_thresh_adj
+    }
+
+
+def extract_waste_fingerprint(
+    food_mask: np.ndarray,
+    valid_contours: list,
+    tray_mask: np.ndarray
+) -> Dict[str, Any]:
+    """
+    Extract a unique morphological fingerprint for food residue:
+    cluster dispersion, spatial distribution, and waste categorization.
+    """
+    cluster_count = len(valid_contours)
+    if cluster_count == 0 or cv2.countNonZero(food_mask) == 0:
+        return {
+            "cluster_count": 0,
+            "avg_cluster_size_px": 0,
+            "largest_cluster_size_px": 0,
+            "dispersion_index": 0.0,
+            "spatial_distribution": "Clean Surface",
+            "fingerprint_label": "Clean Plate Clearance",
+            "description": "Negligible residue detected. Optimal clearance."
+        }
+
+    areas = [int(cv2.contourArea(c)) for c in valid_contours]
+    avg_area = round(float(np.mean(areas)), 1)
+    max_area = int(max(areas))
+
+    # Spatial centroid analysis to determine center vs. periphery distribution
+    h, w = food_mask.shape[:2]
+    center_y, center_x = h // 2, w // 2
+    inner_radius = int(min(h, w) * 0.28)
+
+    center_mask = np.zeros((h, w), dtype=np.uint8)
+    cv2.circle(center_mask, (center_x, center_y), inner_radius, 255, -1)
+    center_food = cv2.countNonZero(cv2.bitwise_and(food_mask, center_mask))
+    total_food = cv2.countNonZero(food_mask)
+
+    center_ratio = (center_food / max(1, total_food))
+
+    if center_ratio > 0.65:
+        spatial_dist = "Center-Concentrated Core Heap"
+    elif center_ratio < 0.28:
+        spatial_dist = "Perimeter / Border Smeared"
+    else:
+        spatial_dist = "Uniformly Scattered Morsels"
+
+    # Dispersion index: bounding extent across the plate
+    all_pts = np.vstack([c for c in valid_contours]) if len(valid_contours) > 0 else np.array([])
+    if len(all_pts) > 0:
+        hull = cv2.convexHull(all_pts)
+        hull_area = cv2.contourArea(hull)
+        dispersion_index = round(float(hull_area / max(1, cv2.countNonZero(tray_mask))), 3)
+    else:
+        dispersion_index = 0.0
+
+    # Categorize into human-understandable Food Waste Fingerprints
+    food_cov_ratio = (total_food / max(1, cv2.countNonZero(tray_mask)))
+    if food_cov_ratio < 0.04:
+        fingerprint_label = "Clean Plate Scrapings"
+        desc = "Virtually clear plate with minor condiment or spice traces."
+    elif max_area > 8000 or (cluster_count <= 2 and food_cov_ratio > 0.22):
+        fingerprint_label = "Single Large Unfinished Portion"
+        desc = "Student left behind an entire solid core heap or whole roti/curry portion."
+    elif cluster_count >= 6 and avg_area < 450:
+        fingerprint_label = "Dispersed Food Grains / Crumbs"
+        desc = "Numerous tiny scattered morsels or grains spread across the plate surface."
+    elif spatial_dist == "Perimeter / Border Smeared":
+        fingerprint_label = "Rim-Smeared Gravy Residue"
+        desc = "Residue spread along the tray edges or compartment dividers."
+    else:
+        fingerprint_label = "Scattered Morsels & Mixed Veg Residue"
+        desc = "Moderate scattered clumps of unfinished meal requiring portioning review."
+
+    return {
+        "cluster_count": cluster_count,
+        "avg_cluster_size_px": avg_area,
+        "largest_cluster_size_px": max_area,
+        "dispersion_index": dispersion_index,
+        "spatial_distribution": spatial_dist,
+        "fingerprint_label": fingerprint_label,
+        "description": desc
+    }
+
+
+def analyze_food_image_adaptive(image_input, custom_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Adaptive Computer Vision pipeline for an individual dining plate:
+    1. Evaluates image quality (brightness, contrast, noise, sharpness)
+    2. Dynamically applies adaptive strategies (CLAHE, exposure offset, bilateral filtering)
+    3. Segments food in dual color spaces (HSV + LAB) and texture
+    4. Extracts visual food-waste fingerprint
+    """
+    start_time = time.perf_counter()
+
+    # Convert to BGR
+    if isinstance(image_input, bytes):
+        nparr = np.frombuffer(image_input, np.uint8)
+        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    elif isinstance(image_input, Image.Image):
+        img_rgb = np.array(image_input.convert("RGB"))
+        img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+    elif isinstance(image_input, np.ndarray):
+        img_bgr = image_input.copy()
+    else:
+        raise ValueError(f"Unsupported input type: {type(image_input)}")
+
+    if img_bgr is None:
+        return {"success": False, "error": "Unable to decode image."}
+
+    # Resize to standard processing envelope
+    h, w = img_bgr.shape[:2]
+    max_dim = 800
+    if max(h, w) > max_dim:
+        scale = max_dim / float(max(h, w))
+        img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        h, w = img_bgr.shape[:2]
+
+    # 1. Quality & Adaptive Parameter Selection
+    quality_info = analyze_image_quality(img_bgr)
+    adaptive_params = select_adaptive_strategy(quality_info)
+
+    # 2. Adaptive Preprocessing
+    processed_bgr = img_bgr.copy()
+    if adaptive_params["apply_clahe"]:
+        lab_pre = cv2.cvtColor(processed_bgr, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab_pre)
+        clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        lab_pre = cv2.merge((l, a, b))
+        processed_bgr = cv2.cvtColor(lab_pre, cv2.COLOR_LAB2BGR)
+
+    if adaptive_params["bilateral_d"] > 0:
+        processed_bgr = cv2.bilateralFilter(processed_bgr, d=adaptive_params["bilateral_d"], sigmaColor=40, sigmaSpace=40)
+
+    # Convert to RGB for display
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+
+    # 3. Plate ROI Isolation
+    gray = cv2.cvtColor(processed_bgr, cv2.COLOR_BGR2GRAY)
+    blurred_gray = cv2.GaussianBlur(gray, (9, 9), 2)
+    circles = cv2.HoughCircles(
+        blurred_gray, cv2.HOUGH_GRADIENT, dp=1.2, minDist=w // 2,
+        param1=50, param2=30, minRadius=int(min(w, h) * 0.25), maxRadius=int(max(w, h) * 0.52)
+    )
+
+    tray_mask = np.zeros((h, w), dtype=np.uint8)
+    detected_tray_shape = "Multi-Compartment Stainless Thali"
+    if circles is not None:
+        circles = np.uint16(np.around(circles))
+        for c in circles[0, :1]:
+            cx, cy, r = int(c[0]), int(c[1]), int(c[2])
+            r = min(r, cx, cy, w - cx, h - cy)
+            if r > int(min(w, h) * 0.25):
+                cv2.circle(tray_mask, (cx, cy), r, 255, -1)
+                detected_tray_shape = "Circular Dining Plate"
+                break
+
+    if cv2.countNonZero(tray_mask) < (h * w * 0.2):
+        mx, my = int(w * 0.06), int(h * 0.06)
+        tray_mask = np.zeros((h, w), dtype=np.uint8)
+        cv2.rectangle(tray_mask, (mx, my), (w - mx, h - my), 255, -1)
+        detected_tray_shape = "Multi-Compartment Stainless Thali"
+
+    tray_pixel_count = cv2.countNonZero(tray_mask)
+
+    # 4. Color & Texture Segmentation
+    hsv = cv2.cvtColor(processed_bgr, cv2.COLOR_BGR2HSV)
+    lab = cv2.cvtColor(processed_bgr, cv2.COLOR_BGR2LAB)
+
+    sat = hsv[:, :, 1]
+    val = hsv[:, :, 2]
+    base_sat_thresh = max(24, 38 + adaptive_params["sat_thresh_adj"])
+    _, food_color_mask = cv2.threshold(sat, base_sat_thresh, 255, cv2.THRESH_BINARY)
+
+    _, a_chan, b_chan = cv2.split(lab)
+    color_deviation = np.abs(a_chan.astype(np.int16) - 128) + np.abs(b_chan.astype(np.int16) - 128)
+    lab_food_mask = np.where(color_deviation > 18, 255, 0).astype(np.uint8)
+
+    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+    texture_mask = np.where((np.abs(laplacian) > 14) & (val > 140) & (sat > 15), 255, 0).astype(np.uint8)
+
+    combined_mask = cv2.bitwise_or(food_color_mask, lab_food_mask)
+    combined_mask = cv2.bitwise_or(combined_mask, texture_mask)
+    food_in_tray = cv2.bitwise_and(combined_mask, combined_mask, mask=tray_mask)
+
+    # 5. Morphology & Cleanup
+    k_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    k_large = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+    cleaned_mask = cv2.morphologyEx(food_in_tray, cv2.MORPH_OPEN, k_small)
+    cleaned_mask = cv2.morphologyEx(cleaned_mask, cv2.MORPH_CLOSE, k_large)
+
+    contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 45]
+
+    final_food_mask = np.zeros_like(cleaned_mask)
+    for cnt in valid_contours:
+        cv2.drawContours(final_food_mask, [cnt], -1, 255, -1)
+
+    food_pixel_count = cv2.countNonZero(final_food_mask)
+    coverage_pct = round((food_pixel_count / max(1, tray_pixel_count)) * 100.0, 1)
+    coverage_pct = min(100.0, max(0.0, coverage_pct))
+
+    # 6. Food Waste Fingerprint
+    fingerprint = extract_waste_fingerprint(final_food_mask, valid_contours, tray_mask)
+
+    # Categorization
+    if coverage_pct < 4.0:
+        cat, color = "Clean Tray", "#16A36A"
+    elif coverage_pct < 16.0:
+        cat, color = "Low Waste", "#84CC16"
+    elif coverage_pct < 32.0:
+        cat, color = "Moderate Waste", "#F4A261"
+    else:
+        cat, color = "High Waste", "#E76F51"
+
+    # Polished Overlay
+    overlay_rgb = img_rgb.copy()
+    tint_layer = np.zeros_like(img_rgb)
+    tint_layer[:, :] = [22, 163, 106]
+    food_indices = (final_food_mask > 0)
+    overlay_rgb[food_indices] = (0.45 * tint_layer[food_indices] + 0.55 * overlay_rgb[food_indices]).astype(np.uint8)
+    cv2.drawContours(overlay_rgb, valid_contours, -1, (197, 244, 103), 2)
+    tray_cnts, _ = cv2.findContours(tray_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(overlay_rgb, tray_cnts, -1, (18, 55, 42), 2)
+
+    elapsed_ms = round((time.perf_counter() - start_time) * 1000, 1)
+
+    return {
+        "success": True,
+        "coverage_percentage": coverage_pct,
+        "leftover_category": cat,
+        "status_color": color,
+        "detected_tray_shape": detected_tray_shape,
+        "food_pixel_count": int(food_pixel_count),
+        "tray_pixel_count": int(tray_pixel_count),
+        "contour_count": len(valid_contours),
+        "processing_time_ms": elapsed_ms,
+        "quality_info": quality_info,
+        "adaptive_strategy": adaptive_params["strategy_name"],
+        "fingerprint": fingerprint,
+        "original_img": Image.fromarray(img_rgb),
+        "overlay_img": Image.fromarray(overlay_rgb),
+        "mask_img": Image.fromarray(cv2.cvtColor(final_food_mask, cv2.COLOR_GRAY2RGB)),
+        "disclaimer": "Relative plate surface coverage estimate. Mass in kg requires physical scale measurement."
+    }
+
+
+def analyze_plate_batch(
+    images_list: List[Tuple[str, Any]],
+    dish_name: str,
+    meal_period: str,
+    service_date: str
+) -> Dict[str, Any]:
+    """
+    Process multiple returned food plates belonging to a specific dish & meal.
+    Calculates batch-level distributions, fingerprint modes, and dish waste indicators.
+    """
+    total_imgs = len(images_list)
+    valid_results = []
+    failed_results = []
+    coverages = []
+    fingerprint_counts = {}
+
+    for p_id, p_input in images_list:
+        try:
+            res = analyze_food_image_adaptive(p_input)
+            if res.get("success"):
+                res["plate_id"] = p_id
+                valid_results.append(res)
+                cov = res["coverage_percentage"]
+                coverages.append(cov)
+                fp = res["fingerprint"]["fingerprint_label"]
+                fingerprint_counts[fp] = fingerprint_counts.get(fp, 0) + 1
+            else:
+                failed_results.append({"plate_id": p_id, "reason": res.get("error", "Processing failed")})
+        except Exception as e:
+            failed_results.append({"plate_id": p_id, "reason": str(e)})
+
+    valid_count = len(valid_results)
+    if valid_count > 0:
+        avg_cov = round(float(np.mean(coverages)), 1)
+        med_cov = round(float(np.median(coverages)), 1)
+        min_cov = round(float(min(coverages)), 1)
+        max_cov = round(float(max(coverages)), 1)
+        high_w = sum(1 for c in coverages if c >= 30.0)
+        low_w = sum(1 for c in coverages if c < 12.0)
+        dominant_fp = max(fingerprint_counts, key=fingerprint_counts.get)
+    else:
+        avg_cov = med_cov = min_cov = max_cov = 0.0
+        high_w = low_w = 0
+        dominant_fp = "No Valid Plates"
+
+    batch_code = f"BATCH-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+    # Generate actionable recommendation for kitchen staff
+    if avg_cov >= 30.0:
+        rec_action = f"🚨 URGENT PORTION REVIEW: '{dish_name}' generated {avg_cov}% average plate residue across {valid_count} analyzed trays. Recommend reducing initial serving ladle size by 20% and testing recipe spice balance."
+    elif avg_cov >= 15.0:
+        rec_action = f"⚠️ MODERATE MONITORING: '{dish_name}' shows {avg_cov}% plate leftover. Normal cafeteria variance. Monitor second-helping frequency."
+    else:
+        rec_action = f"🟢 OPTIMAL ACCEPTABILITY: '{dish_name}' showed excellent plate clearance ({avg_cov}% average leftovers). Maintain current portion ladle size."
+
+    return {
+        "batch_code": batch_code,
+        "dish_name": dish_name,
+        "meal_period": meal_period,
+        "service_date": service_date,
+        "total_images": total_imgs,
+        "valid_images": valid_count,
+        "failed_images": len(failed_results),
+        "average_coverage": avg_cov,
+        "median_coverage": med_cov,
+        "min_coverage": min_cov,
+        "max_coverage": max_cov,
+        "high_leftover_count": high_w,
+        "low_leftover_count": low_w,
+        "dominant_fingerprint": dominant_fp,
+        "fingerprint_breakdown": fingerprint_counts,
+        "coverages_list": coverages,
+        "plate_results": valid_results,
+        "failed_list": failed_results,
+        "recommendation": rec_action
+    }
+
+
+def generate_sample_plate_batch(dish_name: str = "Vegetable Curry", count: int = 8) -> List[Tuple[str, Image.Image]]:
+    """
+    Generate a diverse simulated batch of returned trays for instant demonstration during college viva.
+    Includes clean plates, moderate leftovers, heavy unfinished helpings, and varied contrast.
+    """
+    batch = []
+    types_cycle = ["moderate", "clean", "high", "moderate", "clean", "high", "moderate", "moderate"]
+    for i in range(count):
+        t = types_cycle[i % len(types_cycle)]
+        base_img = create_sample_tray_image(t)
+        # Add slight natural variation
+        arr = np.array(base_img)
+        # Random brightness shift
+        shift = int(np.random.randint(-15, 18))
+        arr = np.clip(arr.astype(np.int16) + shift, 0, 255).astype(np.uint8)
+        batch.append((f"PLATE-0{i+1:02d}", Image.fromarray(arr)))
+    return batch
+
+
+# =============================================================================
+# SYNTHETIC DEMONSTRATION TRAY GENERATOR (EXISTING METHOD PRESERVED)
+# =============================================================================
+
 def create_sample_tray_image(leftover_type: str = "moderate") -> Image.Image:
     """
     Generate a photorealistic synthetic hostel dining tray image for instant testing.
-    
     Args:
         leftover_type: 'clean' or 'moderate' or 'high'
-        
     Returns:
         PIL.Image of a simulated mess dining tray
     """

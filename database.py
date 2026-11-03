@@ -14,6 +14,9 @@ Supports Official Weekly Menu configuration and multi-state attendance intent:
 import os
 import json
 import sqlite3
+import hashlib
+import secrets
+import hmac
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 import pandas as pd
@@ -103,9 +106,160 @@ def init_db(db_path: str = DEFAULT_DB_PATH):
             );
         """)
 
+        # 4. User accounts with RBAC (Manager vs Student)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('manager', 'student')),
+                full_name TEXT NOT NULL,
+                roll_no TEXT,
+                hostel TEXT DEFAULT 'Hostel-1 (Mess 1)',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+        """)
+
+        # 5. Dynamic and published menu items table (Manager CRUD & publish control)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS menu_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                day_of_week TEXT NOT NULL,
+                meal_type TEXT NOT NULL,
+                dish_name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'Main Course',
+                cost_per_serving REAL NOT NULL DEFAULT 15.0,
+                is_published INTEGER NOT NULL DEFAULT 1,
+                specific_date TEXT,
+                created_by TEXT DEFAULT 'manager',
+                updated_at TEXT NOT NULL
+            );
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_menu_lookup 
+            ON menu_items(day_of_week, meal_type, is_published);
+        """)
+
+        # 6. Student meal attendance intents (RSVP per meal period)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS student_meal_intents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                student_roll TEXT NOT NULL,
+                meal_date TEXT NOT NULL,
+                meal_type TEXT NOT NULL,
+                intent_status TEXT NOT NULL CHECK(intent_status IN ('Attending', 'Not Attending', 'Not sure')),
+                dietary_preference TEXT DEFAULT 'Standard Veg',
+                updated_at TEXT NOT NULL,
+                CONSTRAINT uq_student_intent UNIQUE (student_roll, meal_date, meal_type)
+            );
+        """)
+
+        # 7. Student food preference and feedback table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS student_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                student_roll TEXT NOT NULL,
+                meal_date TEXT NOT NULL,
+                meal_type TEXT NOT NULL,
+                dish_name TEXT,
+                rating INTEGER CHECK(rating BETWEEN 1 AND 5),
+                feedback_text TEXT,
+                skip_reason TEXT,
+                created_at TEXT NOT NULL
+            );
+        """)
+
+        # 8. Multi-plate OpenCV batch intelligence table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS vision_batches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                batch_code TEXT UNIQUE NOT NULL,
+                service_date TEXT NOT NULL,
+                meal_period TEXT NOT NULL,
+                dish_name TEXT NOT NULL,
+                total_images INTEGER NOT NULL DEFAULT 0,
+                valid_images INTEGER NOT NULL DEFAULT 0,
+                failed_images INTEGER NOT NULL DEFAULT 0,
+                avg_coverage REAL NOT NULL DEFAULT 0.0,
+                median_coverage REAL NOT NULL DEFAULT 0.0,
+                min_coverage REAL NOT NULL DEFAULT 0.0,
+                max_coverage REAL NOT NULL DEFAULT 0.0,
+                high_leftover_count INTEGER NOT NULL DEFAULT 0,
+                low_leftover_count INTEGER NOT NULL DEFAULT 0,
+                dominant_fingerprint TEXT NOT NULL DEFAULT 'Scattered Residue',
+                actual_discarded_kg REAL,
+                notes TEXT,
+                created_at TEXT NOT NULL
+            );
+        """)
+
+        # 9. Individual plate inspection results within a batch
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS vision_plate_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                batch_id INTEGER NOT NULL,
+                plate_id TEXT NOT NULL,
+                coverage_pct REAL NOT NULL,
+                contour_count INTEGER NOT NULL,
+                cluster_dispersion REAL NOT NULL DEFAULT 0.0,
+                fingerprint TEXT NOT NULL,
+                adaptive_strategy TEXT NOT NULL,
+                quality_score REAL NOT NULL DEFAULT 1.0,
+                status TEXT NOT NULL DEFAULT 'Success',
+                notes TEXT,
+                created_at TEXT NOT NULL
+            );
+        """)
+
+        # 10. Mess configuration settings
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mess_settings (
+                setting_key TEXT PRIMARY KEY,
+                setting_value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+        """)
+
+        # 11. Campus announcements table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS announcements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                priority TEXT DEFAULT 'Normal',
+                target_role TEXT DEFAULT 'all',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+        """)
+
+        # 12. Security & administrative audit logs
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                action TEXT NOT NULL,
+                entity TEXT NOT NULL,
+                details TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            );
+        """)
+
         conn.commit()
     finally:
         conn.close()
+
+    # Seed initial data if tables are fresh
+    seed_default_users(db_path)
+    seed_default_settings(db_path)
+    seed_default_announcements(db_path)
+    seed_menu_items_from_json(db_path)
 
 
 def register_student(
@@ -758,8 +912,938 @@ def get_menu_for_meal(day_of_week: str, meal_type: str, menu_path: str = DEFAULT
     }
 
 
+# =============================================================================
+# AUTHENTICATION & ROLE-BASED ACCESS CONTROL (RBAC)
+# =============================================================================
+
+def hash_password(password: str, salt: Optional[str] = None) -> Tuple[str, str]:
+    """Securely hash password using PBKDF2-HMAC-SHA256 with 100,000 iterations."""
+    if salt is None:
+        salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return key.hex(), salt
+
+
+def verify_password(password: str, stored_hash: str, salt: str) -> bool:
+    """Verify password against stored salt and PBKDF2 hash using timing-safe comparison."""
+    computed_hash, _ = hash_password(password, salt)
+    return hmac.compare_digest(computed_hash, stored_hash)
+
+
+def create_user(
+    username: str,
+    email: str,
+    password: str,
+    role: str,
+    full_name: str,
+    roll_no: Optional[str] = None,
+    hostel: str = "Hostel-1 (Mess 1)",
+    db_path: str = DEFAULT_DB_PATH
+) -> Tuple[bool, str]:
+    """Create a new user account with hashed credentials and role enforcement."""
+    clean_username = username.strip().lower()
+    clean_email = email.strip().lower()
+    role_clean = role.strip().lower()
+
+    if role_clean not in ["manager", "student"]:
+        return False, "Invalid role. Role must be 'manager' or 'student'."
+    if len(password) < 6:
+        return False, "Password must be at least 6 characters."
+
+    pwd_hash, salt = hash_password(password)
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO users (username, email, password_hash, salt, role, full_name, roll_no, hostel, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        """, (clean_username, clean_email, pwd_hash, salt, role_clean, full_name.strip(), roll_no, hostel, now_str))
+        conn.commit()
+        return True, "User registered successfully."
+    except sqlite3.IntegrityError:
+        return False, "Username or email already exists."
+    except Exception as e:
+        return False, f"Database error: {e}"
+    finally:
+        conn.close()
+
+
+def authenticate_user(
+    username_or_email: str,
+    password: str,
+    db_path: str = DEFAULT_DB_PATH
+) -> Optional[Dict[str, Any]]:
+    """
+    Authenticate user by username or email.
+    Returns user dictionary if credentials match and account is active, else None.
+    """
+    ident = username_or_email.strip().lower()
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, username, email, password_hash, salt, role, full_name, roll_no, hostel, is_active
+            FROM users
+            WHERE username = ? OR email = ?
+        """, (ident, ident))
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        if not row["is_active"]:
+            return {"error": "Account is deactivated. Contact mess administration."}
+
+        if verify_password(password, row["password_hash"], row["salt"]):
+            return {
+                "id": row["id"],
+                "username": row["username"],
+                "email": row["email"],
+                "role": row["role"],
+                "full_name": row["full_name"],
+                "roll_no": row["roll_no"] or row["username"].upper(),
+                "hostel": row["hostel"]
+            }
+        return None
+    finally:
+        conn.close()
+
+
+def get_user_by_id(user_id: int, db_path: str = DEFAULT_DB_PATH) -> Optional[Dict[str, Any]]:
+    """Retrieve user dictionary by integer user_id."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, email, role, full_name, roll_no, hostel, is_active, created_at FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_all_users(role: Optional[str] = None, db_path: str = DEFAULT_DB_PATH) -> pd.DataFrame:
+    """Retrieve DataFrame of users, optionally filtered by role (e.g. 'student' or 'manager')."""
+    conn = get_connection(db_path)
+    try:
+        if role:
+            query = "SELECT id, username, email, role, full_name, roll_no, hostel, is_active, created_at FROM users WHERE role = ? ORDER BY id ASC"
+            return pd.read_sql_query(query, conn, params=(role,))
+        else:
+            query = "SELECT id, username, email, role, full_name, roll_no, hostel, is_active, created_at FROM users ORDER BY id ASC"
+            return pd.read_sql_query(query, conn)
+    finally:
+        conn.close()
+
+
+def update_user_status(user_id: int, is_active: bool, db_path: str = DEFAULT_DB_PATH) -> bool:
+    """Activate or deactivate a student account."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET is_active = ? WHERE id = ?", (1 if is_active else 0, user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def update_user_profile(
+    user_id: int,
+    full_name: str,
+    email: str,
+    hostel: str,
+    db_path: str = DEFAULT_DB_PATH
+) -> bool:
+    """Allow students/managers to update permissible profile attributes."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users 
+            SET full_name = ?, email = ?, hostel = ?
+            WHERE id = ?
+        """, (full_name.strip(), email.strip().lower(), hostel.strip(), user_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def seed_default_users(db_path: str = DEFAULT_DB_PATH):
+    """Seed initial demonstration accounts for college demonstration & viva testing."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as cnt FROM users")
+        if cursor.fetchone()["cnt"] == 0:
+            default_accounts = [
+                # Manager account
+                ("manager", "manager@iiitdwd.ac.in", "Manager@123", "manager", "Mess Catering Supervisor", "STAFF-01", "Hostel-1 (Mess 1)"),
+                # Student demonstration accounts
+                ("24bcs042", "student@iiitdwd.ac.in", "Student@123", "student", "Varun Sakinala", "24BCS042", "Hostel-1 (Mess 1)"),
+                ("24bcs015", "aravind@iiitdwd.ac.in", "Student@123", "student", "Aravind Kumar", "24BCS015", "Hostel-1 (Mess 1)"),
+                ("24bcs088", "priya@iiitdwd.ac.in", "Student@123", "student", "Priya Sharma", "24BCS088", "Hostel-2 (Girls Mess)")
+            ]
+            for u_name, u_email, u_pwd, u_role, u_full, u_roll, u_hostel in default_accounts:
+                pwd_h, s = hash_password(u_pwd)
+                cursor.execute("""
+                    INSERT INTO users (username, email, password_hash, salt, role, full_name, roll_no, hostel, is_active, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """, (u_name, u_email, pwd_h, s, u_role, u_full, u_roll, u_hostel, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# MESS SETTINGS & CAMPUS ANNOUNCEMENTS
+# =============================================================================
+
+def seed_default_settings(db_path: str = DEFAULT_DB_PATH):
+    """Seed initial operational parameters for IIIT Dharwad Mess 1."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as cnt FROM mess_settings")
+        if cursor.fetchone()["cnt"] == 0:
+            defaults = [
+                ("mess_name", "IIIT Dharwad Hostel Mess 1"),
+                ("mess_code", "MESS-01-MAIN"),
+                ("breakfast_time", "07:30 AM - 09:30 AM"),
+                ("lunch_time", "12:30 PM - 02:30 PM"),
+                ("snacks_time", "05:00 PM - 06:15 PM"),
+                ("dinner_time", "07:45 PM - 09:45 PM"),
+                ("rsvp_deadline_hours", "2.0"),
+                ("safety_buffer_pct", "5.0"),
+                ("waste_weight_unit", "kg"),
+                ("max_capacity", "550")
+            ]
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            for k, v in defaults:
+                cursor.execute("INSERT OR REPLACE INTO mess_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)", (k, v, now_str))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_mess_settings(db_path: str = DEFAULT_DB_PATH) -> Dict[str, str]:
+    """Retrieve key-value configuration dictionary of mess operational parameters."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT setting_key, setting_value FROM mess_settings")
+        return {r["setting_key"]: r["setting_value"] for r in cursor.fetchall()}
+    finally:
+        conn.close()
+
+
+def update_mess_setting(key: str, value: str, db_path: str = DEFAULT_DB_PATH) -> bool:
+    """Update a specific mess setting."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("INSERT OR REPLACE INTO mess_settings (setting_key, setting_value, updated_at) VALUES (?, ?, ?)", (key, str(value), now_str))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def seed_default_announcements(db_path: str = DEFAULT_DB_PATH):
+    """Seed initial mess announcements."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as cnt FROM announcements")
+        if cursor.fetchone()["cnt"] == 0:
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("""
+                INSERT INTO announcements (title, content, priority, target_role, is_active, created_at)
+                VALUES 
+                ('Welcome to MessMind AI Portal', 'Hostel mess operations are now digitized! Check the daily menu, register your dining attendance, and submit recipe feedback.', 'Normal', 'all', 1, ?),
+                ('Special Sunday Dinner Notice', 'Paneer Butter Masala and Gulab Jamun will be served this Sunday. Please confirm your RSVP intent 2 hours in advance.', 'High', 'student', 1, ?)
+            """, (now_str, now_str))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_announcements(target_role: str = "all", active_only: bool = True, db_path: str = DEFAULT_DB_PATH) -> pd.DataFrame:
+    """Retrieve announcements visible to target role (e.g. 'student', 'manager', or 'all')."""
+    conn = get_connection(db_path)
+    try:
+        where = ["1=1"]
+        params = []
+        if active_only:
+            where.append("is_active = 1")
+        if target_role != "manager":
+            where.append("(target_role = 'all' OR target_role = ?)")
+            params.append(target_role)
+
+        query = f"SELECT id, title, content, priority, target_role, is_active, created_at FROM announcements WHERE {' AND '.join(where)} ORDER BY id DESC"
+        return pd.read_sql_query(query, conn, params=tuple(params))
+    finally:
+        conn.close()
+
+
+def add_announcement(
+    title: str,
+    content: str,
+    priority: str = "Normal",
+    target_role: str = "all",
+    db_path: str = DEFAULT_DB_PATH
+) -> bool:
+    """Manager publishes an announcement."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT INTO announcements (title, content, priority, target_role, is_active, created_at)
+            VALUES (?, ?, ?, ?, 1, ?)
+        """, (title.strip(), content.strip(), priority, target_role, now_str))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def delete_announcement(announcement_id: int, db_path: str = DEFAULT_DB_PATH) -> bool:
+    """Manager deletes an announcement."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM announcements WHERE id = ?", (announcement_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# DYNAMIC MENU MANAGEMENT (MANAGER CRUD & PUBLISH CONTROL)
+# =============================================================================
+
+def seed_menu_items_from_json(db_path: str = DEFAULT_DB_PATH, menu_path: str = DEFAULT_MENU_PATH):
+    """Seed initial menu items table from weekly_menu.json if table is empty."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as cnt FROM menu_items")
+        if cursor.fetchone()["cnt"] == 0:
+            menu_data = load_weekly_menu(menu_path)
+            days = menu_data.get("menu", {})
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            dish_categories = {
+                "Rice": "Rice Item", "Curd Rice": "Rice Item", "Veg Pulav": "Rice Item",
+                "Tomato Rice": "Rice Item", "Jeera Rice": "Rice Item", "Puliogare": "Rice Item",
+                "Dal": "Dal & Gravy", "Dal Fry": "Dal & Gravy", "Dal Tadka": "Dal & Gravy",
+                "Dal Makhani": "Dal & Gravy", "Sambar": "Dal & Gravy", "Rasam": "Dal & Gravy",
+                "Paneer Curry": "Special Curry", "Kadai Paneer": "Special Curry", "Paneer Kholapuri": "Special Curry",
+                "Vegetable Curry": "Veg Sabji", "Aloo Gobi": "Veg Sabji", "Mix Veg Curry": "Veg Sabji",
+                "Chapati": "Breads & Roti", "Puri": "Breads & Roti", "Paratha": "Breads & Roti", "Bhature": "Breads & Roti",
+                "Idli": "Breakfast Core", "Dosa": "Breakfast Core", "Upma": "Breakfast Core", "Pongal": "Breakfast Core",
+                "Samosa": "Evening Snack", "Pani Puri": "Evening Snack", "Pav Bhaji": "Evening Snack",
+                "Curd": "Dairy & Desserts", "Gulab Jamun": "Dairy & Desserts", "Fruit Salad": "Dairy & Desserts"
+            }
+            default_costs = {
+                "Paneer Curry": 25.0, "Kadai Paneer": 26.0, "Paneer Kholapuri": 25.0,
+                "Vegetable Curry": 15.0, "Dal": 14.0, "Dal Fry": 15.0, "Dal Tadka": 15.0,
+                "Rice": 15.0, "Curd Rice": 16.0, "Veg Pulav": 18.0, "Chapati": 12.0,
+                "Idli": 15.0, "Dosa": 18.0, "Samosa": 15.0, "Curd": 10.0, "Gulab Jamun": 12.0
+            }
+
+            for day_name, meals in days.items():
+                for meal_name, m_data in meals.items():
+                    dishes = m_data.get("dishes", [])
+                    for dish in dishes:
+                        cat = dish_categories.get(dish, "Main Course")
+                        cost = default_costs.get(dish, 15.0)
+                        cursor.execute("""
+                            INSERT INTO menu_items (day_of_week, meal_type, dish_name, category, cost_per_serving, is_published, created_by, updated_at)
+                            VALUES (?, ?, ?, ?, ?, 1, 'system', ?)
+                        """, (day_name, meal_name, dish, cat, cost, now_str))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def get_menu_items(
+    day_of_week: Optional[str] = None,
+    meal_type: Optional[str] = None,
+    specific_date: Optional[str] = None,
+    published_only: bool = False,
+    db_path: str = DEFAULT_DB_PATH
+) -> pd.DataFrame:
+    """Retrieve menu items matching filter criteria."""
+    conn = get_connection(db_path)
+    try:
+        where = ["1=1"]
+        params = []
+        if day_of_week:
+            where.append("day_of_week = ?")
+            params.append(day_of_week)
+        if meal_type:
+            where.append("meal_type = ?")
+            params.append(meal_type)
+        if specific_date:
+            where.append("(specific_date = ? OR specific_date IS NULL)")
+            params.append(specific_date)
+        if published_only:
+            where.append("is_published = 1")
+
+        query = f"""
+            SELECT id, day_of_week, meal_type, dish_name, category, cost_per_serving, is_published, specific_date, updated_at
+            FROM menu_items
+            WHERE {' AND '.join(where)}
+            ORDER BY id ASC
+        """
+        return pd.read_sql_query(query, conn, params=tuple(params))
+    finally:
+        conn.close()
+
+
+def add_menu_item(
+    day_of_week: str,
+    meal_type: str,
+    dish_name: str,
+    category: str = "Main Course",
+    cost_per_serving: float = 15.0,
+    is_published: int = 1,
+    specific_date: Optional[str] = None,
+    created_by: str = "manager",
+    db_path: str = DEFAULT_DB_PATH
+) -> Tuple[bool, str]:
+    """Manager adds a dish to the official mess schedule."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT INTO menu_items (day_of_week, meal_type, dish_name, category, cost_per_serving, is_published, specific_date, created_by, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (day_of_week, meal_type, dish_name.strip(), category.strip(), float(cost_per_serving), int(is_published), specific_date, created_by, now_str))
+        conn.commit()
+        return True, f"'{dish_name}' successfully added to {day_of_week} {meal_type} menu."
+    except Exception as e:
+        return False, f"Failed to add menu item: {e}"
+    finally:
+        conn.close()
+
+
+def update_menu_item(
+    item_id: int,
+    dish_name: str,
+    category: str,
+    cost_per_serving: float,
+    is_published: int,
+    db_path: str = DEFAULT_DB_PATH
+) -> bool:
+    """Manager updates an existing menu item."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            UPDATE menu_items 
+            SET dish_name = ?, category = ?, cost_per_serving = ?, is_published = ?, updated_at = ?
+            WHERE id = ?
+        """, (dish_name.strip(), category.strip(), float(cost_per_serving), int(is_published), now_str, item_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def delete_menu_item(item_id: int, db_path: str = DEFAULT_DB_PATH) -> bool:
+    """Manager removes a menu item."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM menu_items WHERE id = ?", (item_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def publish_all_day_menu(day_of_week: str, is_published: int = 1, db_path: str = DEFAULT_DB_PATH) -> bool:
+    """Publish or unpublish all menu items for a specific weekday."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("UPDATE menu_items SET is_published = ?, updated_at = ? WHERE day_of_week = ?", (is_published, now_str, day_of_week))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# STUDENT MEAL REGISTRATION (RSVP) & FEEDBACK
+# =============================================================================
+
+def submit_student_meal_intent(
+    user_id: int,
+    student_roll: str,
+    meal_date: str,
+    meal_type: str,
+    intent_status: str,
+    dietary_pref: str = "Standard Veg",
+    db_path: str = DEFAULT_DB_PATH
+) -> Tuple[bool, str]:
+    """Record student dining intent for a specific meal shift. Overwrites prior intent for same meal."""
+    if intent_status not in ["Attending", "Not Attending", "Not sure"]:
+        return False, "Invalid attendance status."
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO student_meal_intents (user_id, student_roll, meal_date, meal_type, intent_status, dietary_preference, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(student_roll, meal_date, meal_type) DO UPDATE SET
+                intent_status = excluded.intent_status,
+                dietary_preference = excluded.dietary_preference,
+                updated_at = excluded.updated_at
+        """, (user_id, student_roll.strip().upper(), meal_date, meal_type, intent_status, dietary_pref, now_str))
+
+        # Also register in legacy student_registrations table for backwards compatibility
+        intent_code = "Yes" if intent_status == "Attending" else ("No" if intent_status == "Not Attending" else "Not sure")
+        cursor.execute("""
+            INSERT INTO student_registrations (meal_date, meal_type, selected_dishes, registration_code, intention_to_attend, attendance_intent, submission_timestamp)
+            VALUES (?, ?, 'Official Menu', ?, ?, ?, ?)
+        """, (meal_date, meal_type, student_roll.strip().upper(), 1 if intent_status == "Attending" else 0, intent_code, now_str))
+
+        conn.commit()
+        return True, f"Intent for {meal_date} {meal_type} saved as '{intent_status}'."
+    except Exception as e:
+        return False, f"Error saving registration: {e}"
+    finally:
+        conn.close()
+
+
+def get_student_meal_intents(
+    student_roll: Optional[str] = None,
+    meal_date: Optional[str] = None,
+    db_path: str = DEFAULT_DB_PATH
+) -> pd.DataFrame:
+    """Retrieve student meal attendance intent records."""
+    conn = get_connection(db_path)
+    try:
+        where = ["1=1"]
+        params = []
+        if student_roll:
+            where.append("student_roll = ?")
+            params.append(student_roll.strip().upper())
+        if meal_date:
+            where.append("meal_date = ?")
+            params.append(meal_date)
+
+        query = f"SELECT id, student_roll, meal_date, meal_type, intent_status, dietary_preference, updated_at FROM student_meal_intents WHERE {' AND '.join(where)} ORDER BY meal_date DESC, id DESC"
+        return pd.read_sql_query(query, conn, params=tuple(params))
+    finally:
+        conn.close()
+
+
+def get_aggregated_intent_counts_for_date(
+    meal_date: str,
+    meal_type: Optional[str] = None,
+    db_path: str = DEFAULT_DB_PATH
+) -> Dict[str, Any]:
+    """Calculate attendance breakdowns ('Attending', 'Not Attending', 'Not sure') for kitchen planning."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        where = ["meal_date = ?"]
+        params = [meal_date]
+        if meal_type:
+            where.append("meal_type = ?")
+            params.append(meal_type)
+
+        query = f"SELECT intent_status, COUNT(*) as cnt FROM student_meal_intents WHERE {' AND '.join(where)} GROUP BY intent_status"
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        counts = {"Attending": 0, "Not Attending": 0, "Not sure": 0}
+        for r in rows:
+            st = r["intent_status"]
+            if st in counts:
+                counts[st] = r["cnt"]
+
+        # If zero records in student_meal_intents, check legacy registrations
+        if sum(counts.values()) == 0:
+            legacy = get_attendance_intent_counts(meal_date, meal_type or "Lunch", db_path)
+            counts["Attending"] = legacy.get("yes_count", 0)
+            counts["Not Attending"] = legacy.get("no_count", 0)
+            counts["Not sure"] = legacy.get("not_sure_count", 0)
+
+        total = sum(counts.values())
+        return {
+            "attending_count": counts["Attending"],
+            "not_attending_count": counts["Not Attending"],
+            "not_sure_count": counts["Not sure"],
+            "total_polled": total,
+            "effective_predicted_turnout": counts["Attending"] + int(round(counts["Not sure"] * 0.5))
+        }
+    finally:
+        conn.close()
+
+
+def submit_student_feedback(
+    user_id: int,
+    student_roll: str,
+    meal_date: str,
+    meal_type: str,
+    dish_name: Optional[str] = None,
+    rating: int = 5,
+    feedback_text: str = "",
+    skip_reason: str = "",
+    db_path: str = DEFAULT_DB_PATH
+) -> Tuple[bool, str]:
+    """Store student meal review or reason for skipping dining shift."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT INTO student_feedback (user_id, student_roll, meal_date, meal_type, dish_name, rating, feedback_text, skip_reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, student_roll.strip().upper(), meal_date, meal_type, dish_name or "Overall Meal", int(rating), feedback_text.strip(), skip_reason.strip(), now_str))
+        conn.commit()
+        return True, "Feedback submitted successfully! Thank you for helping improve the mess."
+    except Exception as e:
+        return False, f"Database error: {e}"
+    finally:
+        conn.close()
+
+
+def get_student_feedback_records(
+    student_roll: Optional[str] = None,
+    limit: int = 50,
+    db_path: str = DEFAULT_DB_PATH
+) -> pd.DataFrame:
+    """Retrieve student satisfaction ratings and comments."""
+    conn = get_connection(db_path)
+    try:
+        if student_roll:
+            query = "SELECT id, student_roll, meal_date, meal_type, dish_name, rating, feedback_text, skip_reason, created_at FROM student_feedback WHERE student_roll = ? ORDER BY id DESC LIMIT ?"
+            return pd.read_sql_query(query, conn, params=(student_roll.strip().upper(), limit))
+        else:
+            query = "SELECT id, student_roll, meal_date, meal_type, dish_name, rating, feedback_text, skip_reason, created_at FROM student_feedback ORDER BY id DESC LIMIT ?"
+            return pd.read_sql_query(query, conn, params=(limit,))
+    finally:
+        conn.close()
+
+
+def get_feedback_summary(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
+    """Generate aggregate satisfaction metrics for Manager Dashboard."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT AVG(rating) as avg_rating, COUNT(*) as total_feedback FROM student_feedback")
+        row = cursor.fetchone()
+        avg_r = round(float(row["avg_rating"]), 2) if row and row["avg_rating"] is not None else 4.2
+        total_f = row["total_feedback"] if row else 0
+
+        # Most cited skip reasons
+        cursor.execute("SELECT skip_reason, COUNT(*) as cnt FROM student_feedback WHERE skip_reason != '' GROUP BY skip_reason ORDER BY cnt DESC LIMIT 3")
+        reasons = [f"{r['skip_reason']} ({r['cnt']})" for r in cursor.fetchall()]
+
+        return {
+            "average_rating": avg_r,
+            "total_reviews": total_f,
+            "top_skip_reasons": reasons if reasons else ["Out with Friends", "Class/Exam Preparation", "Ordered Online"]
+        }
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# MULTI-PLATE OPENCV BATCHES & HISTORICAL WASTE MEMORY
+# =============================================================================
+
+def save_vision_batch(
+    *args,
+    **kwargs
+) -> int:
+    """Save an entire multi-plate inspection batch into Historical Waste Memory.
+    Can be called either as save_vision_batch(batch_dict, ...) or with individual kwargs.
+    """
+    db_path = kwargs.get("db_path", DEFAULT_DB_PATH)
+    
+    # If first positional argument is a dict (from analyze_plate_batch)
+    if args and isinstance(args[0], dict):
+        b = args[0]
+        batch_code = b.get("batch_code", f"BATCH-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        service_date = b.get("service_date", datetime.now().strftime("%Y-%m-%d"))
+        meal_period = b.get("meal_period", "Lunch")
+        dish_name = b.get("dish_name", "General Dish")
+        total_images = int(b.get("total_images", 0))
+        valid_images = int(b.get("valid_images", total_images))
+        failed_images = int(b.get("failed_images", 0))
+        avg_coverage = float(b.get("average_coverage", b.get("avg_coverage", 0.0)))
+        median_coverage = float(b.get("median_coverage", avg_coverage))
+        min_coverage = float(b.get("min_coverage", 0.0))
+        max_coverage = float(b.get("max_coverage", avg_coverage))
+        high_leftover_count = int(b.get("high_leftover_count", 0))
+        low_leftover_count = int(b.get("low_leftover_count", 0))
+        dominant_fingerprint = str(b.get("dominant_fingerprint", "Scattered Residue"))
+        actual_discarded_kg = kwargs.get("actual_discarded_kg", b.get("actual_discarded_kg"))
+        notes = kwargs.get("notes", b.get("notes", ""))
+        plate_results = b.get("plate_results", [])
+    else:
+        batch_code = kwargs.get("batch_code", args[0] if len(args) > 0 else f"BATCH-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+        service_date = kwargs.get("service_date", args[1] if len(args) > 1 else datetime.now().strftime("%Y-%m-%d"))
+        meal_period = kwargs.get("meal_period", args[2] if len(args) > 2 else "Lunch")
+        dish_name = kwargs.get("dish_name", args[3] if len(args) > 3 else "General Dish")
+        total_images = int(kwargs.get("total_images", args[4] if len(args) > 4 else 0))
+        valid_images = int(kwargs.get("valid_images", args[5] if len(args) > 5 else total_images))
+        failed_images = int(kwargs.get("failed_images", args[6] if len(args) > 6 else 0))
+        avg_coverage = float(kwargs.get("avg_coverage", kwargs.get("average_coverage", args[7] if len(args) > 7 else 0.0)))
+        median_coverage = float(kwargs.get("median_coverage", args[8] if len(args) > 8 else avg_coverage))
+        min_coverage = float(kwargs.get("min_coverage", args[9] if len(args) > 9 else 0.0))
+        max_coverage = float(kwargs.get("max_coverage", args[10] if len(args) > 10 else avg_coverage))
+        high_leftover_count = int(kwargs.get("high_leftover_count", args[11] if len(args) > 11 else 0))
+        low_leftover_count = int(kwargs.get("low_leftover_count", args[12] if len(args) > 12 else 0))
+        dominant_fingerprint = str(kwargs.get("dominant_fingerprint", args[13] if len(args) > 13 else "Scattered Residue"))
+        actual_discarded_kg = kwargs.get("actual_discarded_kg", args[14] if len(args) > 14 else None)
+        notes = kwargs.get("notes", args[15] if len(args) > 15 else "")
+        plate_results = kwargs.get("plate_results", args[16] if len(args) > 16 else [])
+
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT INTO vision_batches (
+                batch_code, service_date, meal_period, dish_name, total_images, valid_images, failed_images,
+                avg_coverage, median_coverage, min_coverage, max_coverage, high_leftover_count, low_leftover_count,
+                dominant_fingerprint, actual_discarded_kg, notes, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            batch_code, service_date, meal_period, dish_name, total_images, valid_images, failed_images,
+            float(avg_coverage), float(median_coverage), float(min_coverage), float(max_coverage),
+            high_leftover_count, low_leftover_count, dominant_fingerprint,
+            float(actual_discarded_kg) if actual_discarded_kg is not None else None, notes, now_str
+        ))
+        batch_id = cursor.lastrowid
+
+        # Insert individual plate metrics
+        if plate_results:
+            for p in plate_results:
+                cov_pct = float(p.get("coverage_percentage", p.get("coverage_pct", 0.0)))
+                c_count = int(p.get("contour_count", 0))
+                
+                fp = p.get("fingerprint", "Scattered Residue")
+                if isinstance(fp, dict):
+                    fp_name = fp.get("fingerprint_type", "Scattered Residue")
+                    disp = float(fp.get("dispersion_index", 0.0))
+                else:
+                    fp_name = str(fp)
+                    disp = float(p.get("cluster_dispersion", 0.0))
+                
+                strat = p.get("adaptive_strategy", "Standard Dual-Space")
+                if isinstance(strat, dict):
+                    strat_name = strat.get("name", "Standard Dual-Space")
+                else:
+                    strat_name = str(strat)
+                
+                q_info = p.get("quality_info", {})
+                if isinstance(q_info, dict):
+                    q_score = float(q_info.get("sharpness", 1.0))
+                else:
+                    q_score = float(p.get("quality_score", 1.0))
+
+                cursor.execute("""
+                    INSERT INTO vision_plate_results (
+                        batch_id, plate_id, coverage_pct, contour_count, cluster_dispersion,
+                        fingerprint, adaptive_strategy, quality_score, status, notes, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    batch_id,
+                    p.get("plate_id", "PLATE"),
+                    cov_pct,
+                    c_count,
+                    disp,
+                    fp_name,
+                    strat_name,
+                    q_score,
+                    p.get("status", "Success"),
+                    p.get("notes", ""),
+                    now_str
+                ))
+
+        conn.commit()
+        return batch_id
+    finally:
+        conn.close()
+
+
+def get_vision_batches(
+    limit: int = 50,
+    dish_name: Optional[str] = None,
+    db_path: str = DEFAULT_DB_PATH
+) -> pd.DataFrame:
+    """Retrieve historical multi-plate vision inspection batches."""
+    conn = get_connection(db_path)
+    try:
+        if dish_name:
+            query = "SELECT * FROM vision_batches WHERE dish_name = ? ORDER BY id DESC LIMIT ?"
+            return pd.read_sql_query(query, conn, params=(dish_name, limit))
+        else:
+            query = "SELECT * FROM vision_batches ORDER BY id DESC LIMIT ?"
+            return pd.read_sql_query(query, conn, params=(limit,))
+    finally:
+        conn.close()
+
+
+def get_vision_batch_plates(batch_id: int, db_path: str = DEFAULT_DB_PATH) -> pd.DataFrame:
+    """Retrieve individual plate inspection records for a specific batch."""
+    conn = get_connection(db_path)
+    try:
+        query = "SELECT * FROM vision_plate_results WHERE batch_id = ? ORDER BY id ASC"
+        return pd.read_sql_query(query, conn, params=(batch_id,))
+    finally:
+        conn.close()
+
+
+def get_dish_historical_vision_memory(dish_name: str, db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
+    """Retrieve longitudinal multi-plate vision intelligence for a specific recipe."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT service_date, meal_period, total_images, avg_coverage, dominant_fingerprint, actual_discarded_kg
+            FROM vision_batches
+            WHERE dish_name = ?
+            ORDER BY service_date DESC LIMIT 10
+        """, (dish_name,))
+        rows = cursor.fetchall()
+        if not rows:
+            return {
+                "has_memory": False,
+                "dish_name": dish_name,
+                "batches_recorded": 0,
+                "chronic_waste": False,
+                "insight": f"No multi-plate vision batches recorded yet for '{dish_name}'. Run a batch scan to build memory."
+            }
+
+        coverages = [r["avg_coverage"] for r in rows]
+        mean_cov = round(float(sum(coverages) / len(coverages)), 1)
+        chronic = mean_cov >= 28.0
+
+        if chronic:
+            insight = f"🚨 CHRONIC SURPLUS: '{dish_name}' has consistently shown {mean_cov}% average plate leftover across {len(rows)} batches. Strong candidate to reduce ladle serving size by 15–20%."
+        elif mean_cov >= 15.0:
+            insight = f"⚠️ MODERATE LEFTOVERS: '{dish_name}' exhibits {mean_cov}% surface residue. Normal cafeteria scraping; monitor on subsequent shifts."
+        else:
+            insight = f"🟢 CLEAN CLEARANCE: '{dish_name}' exhibits minimal plate leftovers ({mean_cov}%). Recipe acceptance is high."
+
+        history_list = []
+        for r in rows:
+            history_list.append({
+                "Date": r["service_date"],
+                "Shift": r["meal_period"],
+                "Plates Analyzed": r["total_images"],
+                "Avg Leftover %": f"{r['avg_coverage']:.1f}%",
+                "Waste Fingerprint": r["dominant_fingerprint"],
+                "Weighed Discarded (kg)": f"{r['actual_discarded_kg']:.1f} kg" if r["actual_discarded_kg"] is not None else "Not weighed"
+            })
+
+        return {
+            "has_memory": True,
+            "dish_name": dish_name,
+            "batches_recorded": len(rows),
+            "mean_coverage_pct": mean_cov,
+            "chronic_waste": chronic,
+            "insight": insight,
+            "history": history_list
+        }
+    finally:
+        conn.close()
+
+
+def record_actual_discarded_weight(
+    dish_name: str,
+    service_date: str,
+    meal_period: str,
+    weight_kg: float,
+    unit: str = "kg",
+    batch_code: Optional[str] = None,
+    db_path: str = DEFAULT_DB_PATH
+) -> bool:
+    """Record physical weighing scale measurement of discarded food."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        if batch_code:
+            cursor.execute("UPDATE vision_batches SET actual_discarded_kg = ? WHERE batch_code = ?", (float(weight_kg), batch_code))
+        # Also update meal_records if matching date, meal, and dish exists
+        cost_row = cursor.execute("SELECT cost_per_serving FROM meal_records WHERE meal_date = ? AND meal_type = ? AND dish_name = ?", (service_date, meal_period, dish_name)).fetchone()
+        cost_val = cost_row["cost_per_serving"] if cost_row else 15.0
+        est_servings = int(round(weight_kg / 0.22))
+        est_cost = round(est_servings * cost_val, 2)
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            UPDATE meal_records 
+            SET discarded_quantity = ?, estimated_discarded_food_cost = ?, recorded_timestamp = ?
+            WHERE meal_date = ? AND meal_type = ? AND dish_name = ?
+        """, (est_servings, est_cost, now_str, service_date, meal_period, dish_name))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# AUDIT LOGGING (ACCOUNTABILITY FOR SENSITIVE MANAGER ACTIONS)
+# =============================================================================
+
+def log_audit_event(
+    username: str,
+    role: str,
+    action: str,
+    entity: str,
+    details: str,
+    db_path: str = DEFAULT_DB_PATH
+) -> bool:
+    """Record security and administrative events into audit_logs table."""
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT INTO audit_logs (username, role, action, entity, details, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (username, role, action, entity, details, now_str))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Audit log error: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_audit_logs(limit: int = 100, db_path: str = DEFAULT_DB_PATH) -> pd.DataFrame:
+    """Retrieve chronological audit trail of administrative operations."""
+    conn = get_connection(db_path)
+    try:
+        query = "SELECT id, timestamp, username, role, action, entity, details FROM audit_logs ORDER BY id DESC LIMIT ?"
+        return pd.read_sql_query(query, conn, params=(limit,))
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     init_db()
-    print("Database initialized with attendance_intent support.")
-    menu = get_menu_for_meal("Monday", "Lunch")
-    print(f"Monday Lunch Official Menu: {menu['display_text']}")
+    print("Database initialized with full RBAC, multi-plate vision memory, and student portals.")
+    print("Default accounts:")
+    print("  Manager: manager / Manager@123")
+    print("  Student: 24bcs042 / Student@123")
